@@ -68,6 +68,26 @@ intall_software() {
   opkg update
   opkg install bash curl conntrack owipcalc etherwake
 }
+################################################################################
+# manage temp files
+FNLST_TEMP=
+function remove_temp_files() {
+  mr_trace "remove FNLST_TEMP=${FNLST_TEMP}"
+  echo "${FNLST_TEMP}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+    if test -f "${a}" ; then
+      echo rm -f "${a}"
+      rm -f "${a}"
+    fi
+  done
+  FNLST_TEMP=
+}
+function add_temp_file() {
+  local PARAM_FN=$1
+  shift
+  mr_trace "add to list: ${PARAM_FN}"
+  FNLST_TEMP="${FNLST_TEMP},${PARAM_FN}"
+  mr_trace "added FNLST_TEMP=${FNLST_TEMP}"
+}
 
 ################################################################################
 
@@ -271,14 +291,15 @@ run_svr() {
     mr_trace "[INFO] got wolonconn.basic.filetemp=${FN_TMP}"
   else
     mr_trace "[ERR] failed to get wolonconn.basic.filetemp"
+    FN_TMP="/tmp/tmp-wol-$(uuidgen)"
   fi
+  add_temp_file "${FN_TMP}"
 
   while true ; do
     sleep 1
     #mr_trace "[INFO] check_conn_send_wol ..."
     check_conn_send_wol "${FN_TMP}"
   done
-
 }
 
 ################################################################################
@@ -308,7 +329,7 @@ assert ()                 #  If condition false,
   fi
 } # Insert a similar assert() function into a script you need to debug.
 
-run_tests() {
+test_in_openwrt_main() {
   #find_intf_by_ip 10.1.1.23
   local INTF=`find_intf_by_ip 10.1.1.23`
   local MAC=`find_mac_by_ip 10.1.1.23`
@@ -319,6 +340,33 @@ run_tests() {
 #IP=10.1.1.178; PORT=443; tcpdump -n -r web-local-1.pcap host $IP and "tcp[tcpflags] & tcp-syn != 0" | grep ${IP}.${PORT} | awk -F, '{split($2,a," "); if (a[1] == "seq") print a[2];}' | sort | awk 'BEGIN{pre="";cnt=0;}{if (pre != $1) {if (pre != "") print cnt " " pre; cnt=0;} cnt=cnt+1; pre=$1; }END{print cnt " " pre;}'
 #1 153253500
 #4 3707552423
+}
+
+test_add_temp_files() {
+  FNLST_TEMP=
+  local FN_TEST1="/tmp/tmp-test-$(uuidgen)"
+  local FN_TEST2="/tmp/tmp-test-$(uuidgen)"
+  touch "${FN_TEST1}"
+  touch "${FN_TEST2}"
+  assert $LINENO " -f ${FN_TEST1} "
+  assert $LINENO " -f ${FN_TEST2} "
+  assert $LINENO "'${FNLST_TEMP}' = ''"
+  add_temp_file "${FN_TEST1}"
+  add_temp_file "${FN_TEST2}"
+  assert $LINENO "! '${FNLST_TEMP}' = ''"
+  remove_temp_files
+  assert $LINENO "'${FNLST_TEMP}' = ''"
+  assert $LINENO "! -f ${FN_TEST1} "
+  assert $LINENO "! -f ${FN_TEST2} "
+  rm -f "${FN_TEST1}"
+  rm -f "${FN_TEST2}"
+}
+
+test_all() {
+  test_add_temp_files
+  #test_in_openwrt_main
+
+  mr_trace "Done tests successfully!"
 }
 
 ################################################################################
@@ -373,7 +421,8 @@ rm -f /tmp/wol-on-conn.log /tmp/wol-on-conn.temp
 rm -f /etc/config/wolonconn
 add_test_config
 
-#run_tests
+test_all
+
 run_svr
 
 

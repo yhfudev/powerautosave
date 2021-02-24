@@ -387,8 +387,8 @@ do_detect() {
 
       CNTRD=$(( CNTRD + 1 ))
       if [ $CNTRD -gt 5 ]; then
-        break
         mr_trace "break CNT=$CNT"
+        break
       fi
     done < "${FN_CSV_TMP}"
     rm -f "${FN_CSV_TMP}"

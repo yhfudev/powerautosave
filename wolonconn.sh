@@ -354,7 +354,7 @@ assert ()                 #  If condition false,
   # else
   #   return
   #   and continue executing the script.
-  fi  
+  fi
 } # Insert a similar assert() function into a script you need to debug.
 
 run_tests() {
@@ -368,8 +368,6 @@ run_tests() {
 #IP=10.1.1.178; PORT=443; tcpdump -n -r web-local-1.pcap host $IP and "tcp[tcpflags] & tcp-syn != 0" | grep ${IP}.${PORT} | awk -F, '{split($2,a," "); if (a[1] == "seq") print a[2];}' | sort | awk 'BEGIN{pre="";cnt=0;}{if (pre != $1) {if (pre != "") print cnt " " pre; cnt=0;} cnt=cnt+1; pre=$1; }END{print cnt " " pre;}'
 #1 153253500
 #4 3707552423
-
-
 
 }
 

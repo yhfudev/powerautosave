@@ -314,7 +314,7 @@ enter_sleep() {
   shift
 
   mr_trace "enter sleep mode '${PARAM_MODE}' ..."
-  exit 1 #DEBUG# sync && sleep 2 && systemctl ${PARAM_MODE}
+  sync && sleep 2 && systemctl ${PARAM_MODE}
 }
 
 FN_CSV_DSTAT="/tmp/tmp-csv-dstat-$(uuidgen)"
@@ -527,6 +527,5 @@ rm -f "${FN_IP}" "${FN_PROC}"
 touch "${FN_IP}" "${FN_PROC}"
 #echo "10.1.1.160/24" >> "${FN_IP}"
 #echo "bash" >> "${FN_PROC}"
-#do_detect 30 "${FN_IP}" "${FN_PROC}"
-do_detect 3 "${FN_IP}" "${FN_PROC}"
+do_detect 30 "${FN_IP}" "${FN_PROC}"
 

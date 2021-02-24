@@ -282,55 +282,6 @@ run_svr() {
 }
 
 ################################################################################
-
-# config config 'basic'
-#   option filetemp '/mnt/sda1/wol-on-conn.temp'
-#   option filelog '/mnt/sda1/wol-on-conn.log'
-#   option freegeoip 'https://freegeoip.app/csv/$clientip'
-#
-# config server 'xxx'
-#   option interface 'coredata'
-#   option mac 'xx:xx:xx:xx:xx:xx'
-#   option ports '80 443'
-# config client 'yyy'
-#   option iprange '192.168.1.0/24'
-# config client 'zzz'
-#   option region 'regionname'
-
-add_test_config() {
-
-  touch /etc/config/wolonconn
-  uci set wolonconn.basic='config'
-  uci set wolonconn.basic.filetemp='/tmp/wol-on-conn.temp'
-  uci set wolonconn.basic.filelog='/tmp/wol-on-conn.log'
-  uci set wolonconn.basic.freegeoip='https://freegeoip.app/csv/$clientip'
-
-  uci add wolonconn server
-  uci set wolonconn.@server[-1].ip='10.1.1.178'
-  uci set wolonconn.@server[-1].ports='22 80 443'
-  #uci set wolonconn.@server[-1].interface='br-lan'
-  #uci set wolonconn.@server[-1].mac='11:22:33:44:55:01'
-
-  uci add wolonconn server
-  uci set wolonconn.@server[-1].ip='10.1.1.23'
-  uci set wolonconn.@server[-1].ports='22 80'
-  #uci set wolonconn.@server[-1].interface='br-coredata'
-  #uci set wolonconn.@server[-1].mac='11:22:33:44:55:02'
-
-  #uci add wolonconn client
-  #uci set wolonconn.@client[-1].region='xxxx'
-
-  # iprange could be one of:
-  #   single ip address, eg. 192.168.1.1;
-  #   CIDR notation, eg. 192.168.1.0/24;
-  #   subnet mask notation, eg. 192.168.1.0/255.255.255.0;
-  uci add wolonconn client
-  uci set wolonconn.@client[-1].iprange='10.1.0.0/16'
-
-  # uci revert wolonconn
-  uci commit wolonconn
-}
-
 assert ()                 #  If condition false,
 {                         #+ exit from script
                           #+ with appropriate error message.
@@ -368,15 +319,60 @@ run_tests() {
 #IP=10.1.1.178; PORT=443; tcpdump -n -r web-local-1.pcap host $IP and "tcp[tcpflags] & tcp-syn != 0" | grep ${IP}.${PORT} | awk -F, '{split($2,a," "); if (a[1] == "seq") print a[2];}' | sort | awk 'BEGIN{pre="";cnt=0;}{if (pre != $1) {if (pre != "") print cnt " " pre; cnt=0;} cnt=cnt+1; pre=$1; }END{print cnt " " pre;}'
 #1 153253500
 #4 3707552423
-
 }
 
 ################################################################################
+# config config 'basic'
+#   option filetemp '/mnt/sda1/wol-on-conn.temp'
+#   option filelog '/mnt/sda1/wol-on-conn.log'
+#   option freegeoip 'https://freegeoip.app/csv/$clientip'
+#
+# config server 'xxx'
+#   option interface 'coredata'
+#   option mac 'xx:xx:xx:xx:xx:xx'
+#   option ports '80 443'
+# config client 'yyy'
+#   option iprange '192.168.1.0/24'
+# config client 'zzz'
+#   option region 'regionname'
+add_test_config() {
+
+  touch /etc/config/wolonconn
+  uci set wolonconn.basic='config'
+  uci set wolonconn.basic.filetemp='/tmp/wol-on-conn.temp'
+  uci set wolonconn.basic.filelog='/tmp/wol-on-conn.log'
+  uci set wolonconn.basic.freegeoip='https://freegeoip.app/csv/$clientip'
+
+  uci add wolonconn server
+  uci set wolonconn.@server[-1].ip='10.1.1.178'
+  uci set wolonconn.@server[-1].ports='22 80 443'
+  #uci set wolonconn.@server[-1].interface='br-lan'
+  #uci set wolonconn.@server[-1].mac='11:22:33:44:55:01'
+
+  uci add wolonconn server
+  uci set wolonconn.@server[-1].ip='10.1.1.23'
+  uci set wolonconn.@server[-1].ports='22 80'
+  #uci set wolonconn.@server[-1].interface='br-coredata'
+  #uci set wolonconn.@server[-1].mac='11:22:33:44:55:02'
+
+  #uci add wolonconn client
+  #uci set wolonconn.@client[-1].region='xxxx'
+
+  # iprange could be one of:
+  #   single ip address, eg. 192.168.1.1;
+  #   CIDR notation, eg. 192.168.1.0/24;
+  #   subnet mask notation, eg. 192.168.1.0/255.255.255.0;
+  uci add wolonconn client
+  uci set wolonconn.@client[-1].iprange='10.1.0.0/16'
+
+  # uci revert wolonconn
+  uci commit wolonconn
+}
 
 rm -f /tmp/wol-on-conn.log /tmp/wol-on-conn.temp
-
 rm -f /etc/config/wolonconn
 add_test_config
+
 #run_tests
 run_svr
 

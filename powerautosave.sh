@@ -1,5 +1,61 @@
 #!/usr/bin/env bash
-# turn system to sleep when system is idle.
+# -*- tab-width: 4; encoding: utf-8 -*-
+#
+#####################################################################
+## @file
+## @brief turn system to sleep when system is idle.
+##
+## @author Yunhui Fu <yhfudev@gmail.com>
+## @copyright GPL v3.0 or later
+## @version 1
+##
+#####################################################################
+
+## @fn my_getpath()
+## @brief get the real name of a path
+## @param dn the path name
+##
+## get the real name of a path, return the real path
+my_getpath() {
+    local PARAM_DN="$1"
+    shift
+    #readlink -f
+    local DN="${PARAM_DN}"
+    local FN=
+    if [ ! -d "${DN}" ]; then
+        FN=$(basename "${DN}")
+        DN=$(dirname "${DN}")
+    fi
+    local DNORIG=$(pwd)
+    cd "${DN}" > /dev/null 2>&1
+    DN=$(pwd)
+    cd "${DNORIG}"
+    if [ "${FN}" = "" ]; then
+        echo "${DN}"
+    else
+        echo "${DN}/${FN}"
+    fi
+}
+#DN_EXEC=`echo "$0" | ${EXEC_AWK} -F/ '{b=$1; for (i=2; i < NF; i ++) {b=b "/" $(i)}; print b}'`
+DN_EXEC=$(dirname $(my_getpath "$0") )
+if [ ! "${DN_EXEC}" = "" ]; then
+    DN_EXEC="$(my_getpath "${DN_EXEC}")/"
+else
+    DN_EXEC="${DN_EXEC}/"
+fi
+DN_TOP="$(my_getpath "${DN_EXEC}/../")"
+DN_BIN="$(my_getpath "${DN_TOP}/bin/")"
+DN_EXEC="$(my_getpath ".")"
+
+#####################################################################
+if [ -f "${DN_EXEC}/libshrt.sh" ]; then
+. ${DN_EXEC}/libshrt.sh
+fi
+HDFF_NUM_CLONE=16
+
+# generate session for this process and its children
+#  use mp_get_session_id to get the session id later
+mp_new_session
 
 ################################################################################
 if [ "${FN_LOG}" = "" ]; then
@@ -46,7 +102,13 @@ if [ ! -x "${EXEC_IPCALC}" ]; then
     exit 1
 fi
 
-intall_software() {
+EXEC_DSTAT="$(which dstat)"
+if [ ! -x "${EXEC_DSTAT}" ]; then
+    mr_trace "[ERR] not found dstat"
+    exit 1
+fi
+
+install_software() {
   apt update
   apt -y install bash prips ipcalc
   #apt -y install sysstat # for mpstat
@@ -111,16 +173,6 @@ trap finish EXIT
 #  exit 0
 #}
 #trap ctrl_c INT
-
-################################################################################
-if [ -f "./libshrt.sh" ]; then
-. ./libshrt.sh
-HDFF_NUM_CLONE=16
-fi
-
-# generate session for this process and its children
-#  use mp_get_session_id to get the session id later
-mp_new_session
 
 ################################################################################
 
@@ -528,7 +580,14 @@ test_all
 add_temp_file "${FN_CSV_DSTAT}"
 add_temp_file "${FN_LIST_ACTIVE_IP}"
 
-FN_IP="/etc/powerautosave/pas-ip.list"
-FN_PROC="/etc/powerautosave/pas-proc.list"
-do_detect 30 "${FN_IP}" "${FN_PROC}"
+# default waiting time before go to sleep
+PAS_IDLE_WAIT_TIME=600
+
+DN_CONF="/etc/powerautosave"
+if [ -f "${DN_CONF}/powerautosave.conf" ]; then
+. ${DN_CONF}/powerautosave.conf
+fi
+FN_IP="${DN_CONF}/pas-ip.list"
+FN_PROC="${DN_CONF}/pas-proc.list"
+do_detect ${PAS_IDLE_WAIT_TIME} "${FN_IP}" "${FN_PROC}"
 

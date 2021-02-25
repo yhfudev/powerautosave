@@ -79,7 +79,7 @@ mp_remove_child_record() {
 ## @fn mp_wait_all_children()
 ## @brief wait all of the children
 mp_wait_all_children() {
-  mr_trace "wait all of children"
+  #mr_trace "wait all of children"
   while [ "$(echo | ${EXEC_AWK} -v A=${CNTCHILD} '{if(A>0){print 1;}else{print 0;}}' )" = "1" ]; do
     for ID2 in ${PID_CHILDREN} ; do
       #mr_trace "wait child ${ID2} ..."

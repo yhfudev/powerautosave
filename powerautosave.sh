@@ -63,8 +63,8 @@ fi
 ##
 ## pass a message to log file, and also to stdout
 mr_trace() {
-    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
-    #DEBUG# logger -t powerautosave "$@"
+    #echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
+    logger -t powerautosave "$@" #DEBUG#
 }
 
 fatal_error() {
@@ -373,7 +373,7 @@ enter_sleep() {
   shift
 
   mr_trace "enter sleep mode '${PARAM_MODE}' ..."
-  exit 1 #DEBUG# sync && sleep 2 && systemctl ${PARAM_MODE}
+  sync && sleep 2 && systemctl ${PARAM_MODE} #DEBUG#
 }
 
 FN_CSV_DSTAT="/tmp/tmp-csv-dstat-$(uuidgen)"
@@ -399,9 +399,19 @@ do_detect() {
   local RET=0
   local CNT=0
   local CNTRD=0
+  local PRE_TIME=`date +%s`
   # cpu,disk,net
   local PRE_VALUES="0,0,0"
   while true; do
+    if [ "$CNT" = "0" ]; then
+      # reset the timer
+      PRE_TIME=`date +%s`
+    fi
+    CUR_TIME=`date +%s`
+    if [ `echo | awk -v p=$PRE_TIME -v off=$PARAM_EXPTIMES -v c=$CUR_TIME '{if (p<c-off) print 1; else print 0;}'` = 1 ]; then
+      mr_trace "wake up at specific time ..."
+      enter_sleep suspend
+    fi
     CNT=$(( CNT + 1 ))
 
     if test -f "${PARAM_FN_IP_PAIR}"; then
@@ -438,7 +448,7 @@ do_detect() {
       #mr_trace "new cpu,hd,net=`echo ${LINE} | awk -F, '{print $3 "," $6 "+" $7 "(" ($6+$7) ")," $8 "+" $9 "(" ($8+$9) ")";}'`" #DEBUG#
       #mr_trace "before update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
       PRE_VALUES=`echo ${LINE} | awk -F, -v A=0.8 -v PRE="${PRE_VALUES}" '{split(PRE,a,","); p_cpu=a[1]; p_hd=a[2]; p_net=a[3]; p_cpu = A*p_cpu + (1.0-A)*$3; p_hd = A*p_hd + (1.0-A)*($6+$7); p_net = A*p_net + (1.0-A)*($8+$9); print p_cpu "," p_hd "," p_net;}'`
-      #mr_trace "after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
+      mr_trace "after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
 
       # cpu >90%
       # disk r/w < 100k
@@ -456,17 +466,13 @@ do_detect() {
 
       CNTRD=$(( CNTRD + 1 ))
       if [ $CNTRD -gt 5 ]; then
-        #mr_trace "break CNT=$CNT"
+        mr_trace "break CNT=$CNT"
         break
       fi
     done < "${FN_CSV_TMP}"
     rm -f "${FN_CSV_TMP}"
 
-    if [ $CNT -gt $PARAM_EXPTIMES ]; then
-      mr_trace "wake up at specific time ..."
-      enter_sleep suspend
-    fi
-    sleep 3
+    sleep 2
   done
 }
 

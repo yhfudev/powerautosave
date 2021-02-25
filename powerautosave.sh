@@ -448,7 +448,7 @@ do_detect() {
       #mr_trace "new cpu,hd,net=`echo ${LINE} | awk -F, '{print $3 "," $6 "+" $7 "(" ($6+$7) ")," $8 "+" $9 "(" ($8+$9) ")";}'`" #DEBUG#
       #mr_trace "before update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
       PRE_VALUES=`echo ${LINE} | awk -F, -v A=0.8 -v PRE="${PRE_VALUES}" '{split(PRE,a,","); p_cpu=a[1]; p_hd=a[2]; p_net=a[3]; p_cpu = A*p_cpu + (1.0-A)*$3; p_hd = A*p_hd + (1.0-A)*($6+$7); p_net = A*p_net + (1.0-A)*($8+$9); print p_cpu "," p_hd "," p_net;}'`
-      mr_trace "after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
+      #mr_trace "after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
 
       # cpu >90%
       # disk r/w < 100k
@@ -466,7 +466,7 @@ do_detect() {
 
       CNTRD=$(( CNTRD + 1 ))
       if [ $CNTRD -gt 5 ]; then
-        mr_trace "break CNT=$CNT"
+        #mr_trace "break CNT=$CNT"
         break
       fi
     done < "${FN_CSV_TMP}"

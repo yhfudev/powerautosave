@@ -17,13 +17,13 @@ fi
 ##
 ## pass a message to log file, and also to stdout
 mr_trace() {
-    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
-    #logger -t powerautosave "$@"
+    #echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
+    logger -t powerautosave "$@"
 }
 
 fatal_error() {
-  echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] FATAL: $@" | tee -a ${FN_LOG} 1>&2
-  #logger -t powerautosave "[FATAL] $@"
+  #echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] FATAL: $@" | tee -a ${FN_LOG} 1>&2
+  logger -t powerautosave "[FATAL] $@"
   exit 1
 }
 
@@ -57,7 +57,7 @@ intall_software() {
 # manage temp files
 FNLST_TEMP=
 function remove_temp_files() {
-  mr_trace "remove FNLST_TEMP=${FNLST_TEMP}"
+  #mr_trace "remove FNLST_TEMP=${FNLST_TEMP}"
   echo "${FNLST_TEMP}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
     if test -f "${a}" ; then
       echo rm -f "${a}"
@@ -69,15 +69,15 @@ function remove_temp_files() {
 function add_temp_file() {
   local PARAM_FN=$1
   shift
-  mr_trace "add to list: ${PARAM_FN}"
+  #mr_trace "add to list: ${PARAM_FN}"
   FNLST_TEMP="${FNLST_TEMP},${PARAM_FN}"
-  mr_trace "added FNLST_TEMP=${FNLST_TEMP}"
+  #mr_trace "added FNLST_TEMP=${FNLST_TEMP}"
 }
 
 # mange background processes
 PSLST_BACK=
 function remove_processes() {
-  mr_trace "remove PSLST_BACK=${PSLST_BACK}"
+  #mr_trace "remove PSLST_BACK=${PSLST_BACK}"
   echo "${PSLST_BACK}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
     if [ ! "${a}" = "" ] ; then
       echo kill "${a}"
@@ -91,15 +91,15 @@ function remove_processes() {
 function add_process() {
   local PARAM_PS=$1
   shift
-  mr_trace "add to list: ${PARAM_PS}"
+  #mr_trace "add to list: ${PARAM_PS}"
   PSLST_BACK="${PSLST_BACK},${PARAM_PS}"
-  mr_trace "added PSLST_BACK=${PSLST_BACK}"
+  #mr_trace "added PSLST_BACK=${PSLST_BACK}"
 }
 
 function finish {
-  mr_trace "remove_processes ..."
+  #mr_trace "remove_processes ..."
   remove_processes
-  mr_trace "remove_temp_files ..."
+  #mr_trace "remove_temp_files ..."
   remove_temp_files
 }
 trap finish EXIT
@@ -162,7 +162,7 @@ function worker_ping_ip() {
     # awk -v rseed=$RANDOM 'BEGIN{srand(rseed);}{print rand()" "$0}'
     sleep $( echo | awk -v A=$RANDOM '{printf("%4.3f\n", (A%20+1)*0.3);}' )
     # push to the list
-    mr_trace "add to list: ${PARAM_IP} ..."
+    #mr_trace "add to list: ${PARAM_IP} ..."
     echo "${PARAM_IP}" >> ${PARAM_FN_LIST}
   fi
 
@@ -179,7 +179,7 @@ ping_ip_list_from_file() {
   shift
   local PARAM_FN_OUT=$1
   shift
-  mr_trace "ping_ip_list_from_file ..."
+  #mr_trace "ping_ip_list_from_file ..."
 
   HDFF_NUM_CLONE=300
   while read IP; do
@@ -188,7 +188,7 @@ ping_ip_list_from_file() {
     mp_add_child_check_wait ${PID_CHILD}
   done < "${PARAM_FN_IN}"
   mp_wait_all_children
-  mr_trace "HDFF_NUM_CLONE=${HDFF_NUM_CLONE}"
+  #mr_trace "HDFF_NUM_CLONE=${HDFF_NUM_CLONE}"
   HDFF_NUM_CLONE=16
 }
 
@@ -204,7 +204,7 @@ ping_ip_range() {
   shift
   local PARAM_IP2=$1
   shift
-  mr_trace "ping_ip_range ..."
+  #mr_trace "ping_ip_range ..."
 
   # ipcalc -b 192.168.0.1/24
   # prips 192.168.0.1 192.168.1.3
@@ -342,16 +342,15 @@ do_detect() {
   local CNTRD=0
   while true; do
     CNT=$(( CNT + 1 ))
-    mr_trace "CNT1=$CNT"
 
-    mr_trace "check if host exists ..."
+    #mr_trace "check if host exists ..."
     RET=`ping_list "${PARAM_FN_IP_PAIR}"`
     # ... reset to CNT=0 if exist IP
     if [ "$RET" = "1" ]; then
       CNT=0
     fi
 
-    mr_trace "check if exist background processes ..."
+    #mr_trace "check if exist background processes ..."
     local ALLPS=`cat "${PARAM_FN_PROC}"`
     RET=`detect_processes ${ALLPS}`
     # ... reset to CNT=0 if exist processes
@@ -359,7 +358,6 @@ do_detect() {
       CNT=0
     fi
 
-    mr_trace "CNT2=$CNT"
     if [ "$CNT" = "0" ]; then
       mr_trace "previous check reset CNT, continue"
       rm -f "${FN_CSV_DSTAT}"
@@ -381,19 +379,18 @@ do_detect() {
       # net recv/send < 1k
       RET=`echo $LINE | awk -F, 'BEGIN{out=0}{ if ($3 < 90.0) out=1; if ($6 > 100000) out=1;if ($7 > 100000) out=1; if ($8 > 1000) out=1;if ($9 > 1000) out=1; }END{print out;}'`
       if [ "$RET" = "1" ]; then
-        mr_trace "reset CNT=0"
+        #mr_trace "reset CNT=0"
         CNT=0
       fi
 
       CNTRD=$(( CNTRD + 1 ))
       if [ $CNTRD -gt 5 ]; then
-        mr_trace "break CNT=$CNT"
+        #mr_trace "break CNT=$CNT"
         break
       fi
     done < "${FN_CSV_TMP}"
     rm -f "${FN_CSV_TMP}"
-    mr_trace "CNT3=$CNT"
-    mr_trace "PARAM_EXPTIMES=$PARAM_EXPTIMES"
+    #mr_trace "PARAM_EXPTIMES=$PARAM_EXPTIMES"
 
     if [ $CNT -gt $PARAM_EXPTIMES ]; then
       mr_trace "wake up at specific time ..."
@@ -516,16 +513,22 @@ test_all() {
   mr_trace "Done tests successfully!"
 }
 
+add_test_config() {
+  FN_IP="/tmp/out-ip"
+  FN_PROC="/tmp/out-proc"
+  rm -f "${FN_IP}" "${FN_PROC}"
+  touch "${FN_IP}" "${FN_PROC}"
+  echo "10.1.1.160/24" >> "${FN_IP}"
+  echo "bash" >> "${FN_PROC}"
+}
+
+#add_test_config
 test_all
 
 add_temp_file "${FN_CSV_DSTAT}"
 add_temp_file "${FN_LIST_ACTIVE_IP}"
 
-FN_IP="/tmp/out-ip"
-FN_IP="/tmp/out-proc"
-rm -f "${FN_IP}" "${FN_PROC}"
-touch "${FN_IP}" "${FN_PROC}"
-#echo "10.1.1.160/24" >> "${FN_IP}"
-#echo "bash" >> "${FN_PROC}"
+FN_IP="/etc/powerautosave/pas-ip.list"
+FN_PROC="/etc/powerautosave/pas-proc.list"
 do_detect 30 "${FN_IP}" "${FN_PROC}"
 

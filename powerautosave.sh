@@ -411,6 +411,8 @@ do_detect() {
     if [ `echo | awk -v p=$PRE_TIME -v off=$PARAM_EXPTIMES -v c=$CUR_TIME '{if (p<c-off) print 1; else print 0;}'` = 1 ]; then
       mr_trace "wake up at specific time ..."
       enter_sleep suspend
+      PRE_TIME=`date +%s`
+      CNT=0
     fi
     CNT=$(( CNT + 1 ))
 

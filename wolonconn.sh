@@ -64,15 +64,21 @@ if [ ! -x "${EXEC_CONNTRACK}" ]; then
     exit 1
 fi
 
+EXEC_UUIDGEN="$(which uuidgen)"
+if [ ! -x "${EXEC_UUIDGEN}" ]; then
+    mr_trace "[ERR] not found uuidgen"
+    exit 1
+fi
+
 intall_software() {
   opkg update
-  opkg install bash curl conntrack owipcalc etherwake
+  opkg install bash curl conntrack owipcalc etherwake uuidgen
 }
 ################################################################################
 # manage temp files
 FNLST_TEMP=
 function remove_temp_files() {
-  mr_trace "remove FNLST_TEMP=${FNLST_TEMP}"
+  #mr_trace "remove FNLST_TEMP=${FNLST_TEMP}"
   echo "${FNLST_TEMP}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
     if test -f "${a}" ; then
       echo rm -f "${a}"
@@ -84,9 +90,9 @@ function remove_temp_files() {
 function add_temp_file() {
   local PARAM_FN=$1
   shift
-  mr_trace "add to list: ${PARAM_FN}"
+  #mr_trace "add to list: ${PARAM_FN}"
   FNLST_TEMP="${FNLST_TEMP},${PARAM_FN}"
-  mr_trace "added FNLST_TEMP=${FNLST_TEMP}"
+  #mr_trace "added FNLST_TEMP=${FNLST_TEMP}"
 }
 
 ################################################################################
@@ -159,6 +165,25 @@ find_mac_by_ip() {
   done
 }
 
+# generate a client list
+#   <ip range>,<region>
+#
+uci_generate_client_list() {
+  local FN_OUT_CLI=$1
+  shift
+
+  local NUM_CLI=`uci show wolonconn | egrep 'wolonconn.@client\[[0-9]+\]=' | sort | uniq | wc -l`
+  #if [[ ${CNT1} < $NUM_SVR ]]; then echo "ok"; else echo "fail"; fi
+  local CNT1=0
+  while [ `echo | awk -v A=${CNT1} -v B=${NUM_CLI} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
+    local CONF_REGION=`uci get wolonconn.@client[${CNT1}].region`
+    local CONF_IPRANGE=`uci get wolonconn.@client[${CNT1}].iprange`
+    #mr_trace "[INFO] client[${CNT1}].iprange=${CONF_IPRANGE}; region=${CONF_REGION}"
+    echo "${CONF_IPRANGE},${CONF_REGION}" >> "${FN_OUT_CLI}"
+    CNT1=$(( CNT1 + 1 ))
+  done
+}
+
 # client_ip, interface, mac, dest, logfile
 check_client_send_wol() {
   # the client IP
@@ -173,21 +198,20 @@ check_client_send_wol() {
   # the server info to log, such ip:port
   local DEST_SVR=$1
   shift
+  local FN_OUT_CLI=$1
+  shift
 
   #mr_trace "[INFO] check_client_send_wol ip='${IP_CLI}' intf='${INTF_SVR}' mac='${MAC_SVR}' dest='${DEST_SVR}'"
-
-  local NUM_CLI=`uci show wolonconn | egrep 'wolonconn.@client\[[0-9]+\]=' | sort | uniq | wc -l`
-  #if [[ ${CNT1} < $NUM_SVR ]]; then echo "ok"; else echo "fail"; fi
-  local CNT1=0
-  while [ `echo | awk -v A=${CNT1} -v B=${NUM_CLI} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
-    local CONF_REGION=`uci get wolonconn.@client[${CNT1}].region`
-    local CONF_IPRANGE=`uci get wolonconn.@client[${CNT1}].iprange`
-    mr_trace "[INFO] client[${CNT1}].iprange=${CONF_IPRANGE}; region=${CONF_REGION}"
+  local LINE=
+  while read LINE; do
+    local CONF_IPRANGE=`echo $LINE | awk -F, '{print $1}'`
+    local CONF_REGION=`echo $LINE | awk -F, '{print $2}'`
+    #mr_trace "[INFO] client.iprange=${CONF_IPRANGE}; region=${CONF_REGION}"
 
     if [ ! "${CONF_IPRANGE}" = "" ]; then
       #mr_trace "[INFO] owipcalc ${CONF_IPRANGE} contains ${IP_CLI} ..."
       if [ `owipcalc ${CONF_IPRANGE} contains ${IP_CLI}` = 1 ] ; then
-        mr_trace "[INFO] etherwake -i ${INTF_SVR} ${MAC_SVR}"
+        #mr_trace "[INFO] etherwake -i ${INTF_SVR} ${MAC_SVR}"
         etherwake -i "${INTF_SVR}" "${MAC_SVR}"
         mr_trace "[INFO] Sent MagicPacket(tm) to ${MAC_SVR} on connection from ${IP_CLI} to ${DEST_SVR}"
       fi
@@ -199,22 +223,24 @@ check_client_send_wol() {
 $string
 EOF
       if [ "$region_name" = "${CONF_REGION}" ] ; then
-        mr_trace "[INFO] etherwake -i ${INTF_SVR} ${MAC_SVR}"
+        #mr_trace "[INFO] etherwake -i ${INTF_SVR} ${MAC_SVR}"
         etherwake -i "${INTF_SVR}" "${MAC_SVR}"
         mr_trace "[INFO] Sent MagicPacket(tm) to ${MAC_SVR} on connection from $clientip to ${DEST_SVR}"
       fi
     fi
 
-    CNT1=$(( CNT1 + 1 ))
-  done
+  done < "${FN_OUT_CLI}"
 
 }
 
+# generate a client list:
+#   <interface>,<mac>,<ip>,<port>
+#
 # example of conntrack:
 # conntrack -L -p tcp --reply-src 10.1.1.23 --reply-port-src 80 --state SYN_SENT
 #tcp      6 119 SYN_SENT src=10.1.1.178 dst=10.1.1.23 sport=39226 dport=80 packets=3 bytes=180 [UNREPLIED] src=10.1.1.23 dst=10.1.1.178 sport=80 dport=39226 packets=0 bytes=0 mark=0 use=1
-check_conn_send_wol() {
-  local FN_TMP=$1
+uci_generate_server_list() {
+  local FN_OUT_SVR=$1
   shift
   #uci show wolonconn
 
@@ -257,48 +283,81 @@ check_conn_send_wol() {
 
     #mr_trace "[INFO] server[${CNT}].mac=${CONF_MAC}; IP=${CONF_IP}"
     for PORT in ${CONF_PORTS}; do
-      #mr_trace "[INFO] conntrack -L -p tcp --reply-src ${CONF_IP} --reply-port-src ${PORT} --state SYN_SENT"
-      conntrack -L -p tcp --reply-src ${CONF_IP} --reply-port-src ${PORT} --state SYN_SENT 2>/dev/null > "${FN_TMP}"
-      while read CLIENT_IP ; do
-        local CLIENT_IP=${CLIENT_IP##*SYN_SENT src=}
-        local CLIENT_IP=${CLIENT_IP%% *}
-
-        check_client_send_wol "${CLIENT_IP}" "${CONF_INTF}" "${CONF_MAC}" "${CONF_IP}:${PORT}"
-
-      done < "${FN_TMP}"
+      echo "${CONF_INTF},${CONF_MAC},${CONF_IP},${PORT}" >> "${FN_OUT_SVR}"
     done
 
     CNT=$(( CNT + 1 ))
   done
 }
 
+# read from the server file lines:
+#   <interface>,<mac>,<ip>,<port>
+# and client file lines:
+#   <ip range>,<region>
+check_conn_send_wol() {
+  local FN_LST_SVR=$1
+  shift
+  local FN_LST_CLI=$1
+  shift
+  local FN_TMP=$1
+  shift
+
+  local LINE=
+  while read LINE; do
+    local CONF_INTF=`echo $LINE | awk -F, '{print $1}'`
+    local CONF_MAC=`echo $LINE | awk -F, '{print $2}'`
+    local CONF_IP=`echo $LINE | awk -F, '{print $3}'`
+    local PORT=`echo $LINE | awk -F, '{print $4}'`
+    #mr_trace "[INFO] server.interface=${CONF_INTF}; mac=${CONF_MAC}; ip=${CONF_IP}; port=${PORT}"
+
+    #mr_trace "[INFO] conntrack -L -p tcp --reply-src ${CONF_IP} --reply-port-src ${PORT} --state SYN_SENT"
+    conntrack -L -p tcp --reply-src ${CONF_IP} --reply-port-src ${PORT} --state SYN_SENT 2>/dev/null > "${FN_TMP}"
+    while read CLIENT_IP ; do
+      local CLIENT_IP=${CLIENT_IP##*SYN_SENT src=}
+      local CLIENT_IP=${CLIENT_IP%% *}
+
+      check_client_send_wol "${CLIENT_IP}" "${CONF_INTF}" "${CONF_MAC}" "${CONF_IP}:${PORT}" "${FN_LST_CLI}"
+
+    done < "${FN_TMP}"
+  done < "${FN_LST_SVR}"
+}
+
 ################################################################################
 
 run_svr() {
-  local FN_LOG=''
   local FN_TMP=''
+  local FN_LST_SVR="/tmp/tmp-svrlst-$(uuidgen)"
+  local FN_LST_CLI="/tmp/tmp-clilst-$(uuidgen)"
 
+  local FN_LOG1=''
   FN_LOG1=`uci get wolonconn.basic.filelog`
   if [ $? = 0 ]; then
     FN_LOG="${FN_LOG1}"
-    mr_trace "[INFO] got wolonconn.basic.filelog=${FN_LOG}"
+    #mr_trace "[INFO] got wolonconn.basic.filelog=${FN_LOG}"
   else
     mr_trace "[ERR] failed to get wolonconn.basic.filelog"
   fi
 
   FN_TMP=`uci get wolonconn.basic.filetemp`
   if [ $? = 0 ]; then
-    mr_trace "[INFO] got wolonconn.basic.filetemp=${FN_TMP}"
+    #mr_trace "[INFO] got wolonconn.basic.filetemp=${FN_TMP}"
+    echo
   else
     mr_trace "[ERR] failed to get wolonconn.basic.filetemp"
     FN_TMP="/tmp/tmp-wol-$(uuidgen)"
   fi
   add_temp_file "${FN_TMP}"
 
+  rm -f "${FN_LST_SVR}" "${FN_LST_CLI}"
+  uci_generate_server_list "${FN_LST_SVR}"
+  uci_generate_client_list "${FN_LST_CLI}"
+  add_temp_file "${FN_LST_SVR}"
+  add_temp_file "${FN_LST_CLI}"
+
   while true ; do
     sleep 1
     #mr_trace "[INFO] check_conn_send_wol ..."
-    check_conn_send_wol "${FN_TMP}"
+    check_conn_send_wol "${FN_LST_SVR}" "${FN_LST_CLI}" "${FN_TMP}"
   done
 }
 

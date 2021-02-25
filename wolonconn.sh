@@ -422,6 +422,8 @@ test_add_temp_files() {
 }
 
 test_all() {
+  add_test_config
+
   test_add_temp_files
   #test_in_openwrt_main
 
@@ -444,11 +446,13 @@ test_all() {
 #   option region 'regionname'
 add_test_config() {
 
+  rm -f /tmp/wol-on-conn.log /tmp/wol-on-conn.temp
+  rm -f /etc/config/wolonconn
+
   touch /etc/config/wolonconn
   uci set wolonconn.basic='config'
   uci set wolonconn.basic.filetemp='/tmp/wol-on-conn.temp'
   uci set wolonconn.basic.filelog='/tmp/wol-on-conn.log'
-  uci set wolonconn.basic.freegeoip='https://freegeoip.app/csv/$clientip'
 
   uci add wolonconn server
   uci set wolonconn.@server[-1].ip='10.1.1.178'
@@ -476,11 +480,7 @@ add_test_config() {
   uci commit wolonconn
 }
 
-rm -f /tmp/wol-on-conn.log /tmp/wol-on-conn.temp
-rm -f /etc/config/wolonconn
-add_test_config
-
-test_all
+#test_all
 
 run_svr
 

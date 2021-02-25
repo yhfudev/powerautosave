@@ -108,11 +108,18 @@ if [ ! -x "${EXEC_DSTAT}" ]; then
     exit 1
 fi
 
+EXEC_UUIDGEN="$(which uuidgen)"
+if [ ! -x "${EXEC_UUIDGEN}" ]; then
+    mr_trace "[ERR] not found uuidgen"
+    exit 1
+fi
+
 install_software() {
   apt update
   apt -y install bash prips ipcalc
   #apt -y install sysstat # for mpstat
   apt -y install pcp #for dstat
+  apt -y install uuid-runtime # uuidgen
 }
 
 ################################################################################

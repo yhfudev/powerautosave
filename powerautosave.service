@@ -5,6 +5,7 @@ Description=powerautosave
 [Service]
 Type=idle
 Environment="TERM=dumb"
+WorkingDirectory=/etc/powerautosave
 ExecStart=/etc/powerautosave/powerautosave.sh
 
 [Install]

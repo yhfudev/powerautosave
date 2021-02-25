@@ -3,10 +3,9 @@
 Some scripts for saving PC power.
 
 
+## Install powerautosave.sh (Ubuntu)
 
-## Install powerautosave.sh
-
-Ubuntu
+powerautosave.sh is a script to turn server to sleep mode when the server is idle.
 
 ```bash
 # install packages:
@@ -37,7 +36,7 @@ systemctl restart powerautosave
 
 ## Install wolonconn.sh (OpenWrt)
 
-
+wolonconn.sh is a script to send WOL packets to active the server once a connection detected on router.
 
 ```bash
 # install packages:
@@ -45,7 +44,8 @@ opkg update
 opkg install bash curl conntrack owipcalc etherwake uuidgen
 
 # install script
-cp wolonconn.sh /etc/
+cp wolonconn.sh /etc/wolonconn.sh
+chmod 755 /etc/wolonconn.sh
 
 # setup config
 rm -f /etc/config/wolonconn
@@ -75,7 +75,7 @@ add the line to the /etc/rc.local, before exit
 
 ```bash
 # /etc/rc.local
-/etc/wolonconn.sh
+/etc/wolonconn.sh &
 
 exit
 ```

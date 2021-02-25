@@ -12,21 +12,28 @@ powerautosave.sh is a script to turn server to sleep mode when the server is idl
 apt update && apt -y install bash prips ipcalc pcp uuid-runtime
 
 # install script
-mkdir /etc/powerautosave/
-cp powerautosave.service powerautosave.sh libshrt.sh /etc/powerautosave/
-cd /etc/powerautosave/
+DN_CONF="/etc/powerautosave"
+mkdir "${DN_CONF}"
+cp powerautosave.service powerautosave.sh libshrt.sh "${DN_CONF}"
+cd "${DN_CONF}"
 chmod 755 *.sh
 
 # the host ip list, the server will enter to sleep if none is ping-able.
-touch /etc/powerautosave/pas-ip.list
-# echo "10.1.1.160/24" >> /etc/powerautosave/pas-ip.list
+touch "${DN_CONF}/pas-ip.list"
+# echo "10.1.1.160/24" >> "${DN_CONF}/pas-ip.list"
 
 # the processes list, the server will enter to sleep if none is running.
-touch /etc/powerautosave/pas-proc.list
-# echo "wget" >> /etc/powerautosave/pas-proc.list
+touch "${DN_CONF}/pas-proc.list"
+# echo "wget" >> "${DN_CONF}/pas-proc.list"
 
 # setup the waiting time before sleep in config file
-echo "PAS_IDLE_WAIT_TIME=600" >> /etc/powerautosave/powerautosave.conf
+cat >> "${DN_CONF}/powerautosave.conf" <<EOF
+# default waiting time before go to sleep
+PAS_IDLE_WAIT_TIME=600 # second
+PAS_CPU_THRESHOLD=88   # percent
+PAS_HD_THRESHOLD=900   # Kbytes
+PAS_NET_THRESHOLD=4000 # bytes
+EOF
 
 # setup service
 cp powerautosave.service /etc/systemd/system/powerautosave.service

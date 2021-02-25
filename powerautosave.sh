@@ -47,16 +47,6 @@ DN_TOP="$(my_getpath "${DN_EXEC}/../")"
 DN_BIN="$(my_getpath "${DN_TOP}/bin/")"
 DN_EXEC="$(my_getpath ".")"
 
-#####################################################################
-if [ -f "${DN_EXEC}/libshrt.sh" ]; then
-. ${DN_EXEC}/libshrt.sh
-fi
-HDFF_NUM_CLONE=16
-
-# generate session for this process and its children
-#  use mp_get_session_id to get the session id later
-mp_new_session
-
 ################################################################################
 if [ "${FN_LOG}" = "" ]; then
     FN_LOG=mrtrace.log
@@ -73,8 +63,8 @@ fi
 ##
 ## pass a message to log file, and also to stdout
 mr_trace() {
-    #echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
-    logger -t powerautosave "$@"
+    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
+    #DEBUG# logger -t powerautosave "$@"
 }
 
 fatal_error() {
@@ -82,6 +72,16 @@ fatal_error() {
   logger -t powerautosave "[FATAL] $@"
   exit 1
 }
+
+#####################################################################
+if [ -f "${DN_EXEC}/libshrt.sh" ]; then
+. ${DN_EXEC}/libshrt.sh
+fi
+HDFF_NUM_CLONE=16
+
+# generate session for this process and its children
+#  use mp_get_session_id to get the session id later
+mp_new_session
 
 ################################################################################
 EXEC_BASH="$(which bash)"
@@ -373,7 +373,7 @@ enter_sleep() {
   shift
 
   mr_trace "enter sleep mode '${PARAM_MODE}' ..."
-  sync && sleep 2 && systemctl ${PARAM_MODE}
+  exit 1 #DEBUG# sync && sleep 2 && systemctl ${PARAM_MODE}
 }
 
 FN_CSV_DSTAT="/tmp/tmp-csv-dstat-$(uuidgen)"
@@ -399,22 +399,28 @@ do_detect() {
   local RET=0
   local CNT=0
   local CNTRD=0
+  # cpu,disk,net
+  local PRE_VALUES="0,0,0"
   while true; do
     CNT=$(( CNT + 1 ))
 
-    #mr_trace "check if host exists ..."
-    RET=`ping_list "${PARAM_FN_IP_PAIR}"`
-    # ... reset to CNT=0 if exist IP
-    if [ "$RET" = "1" ]; then
-      CNT=0
+    if test -f "${PARAM_FN_IP_PAIR}"; then
+      #mr_trace "check if host exists ..."
+      RET=`ping_list "${PARAM_FN_IP_PAIR}"`
+      # ... reset to CNT=0 if exist IP
+      if [ "$RET" = "1" ]; then
+        CNT=0
+      fi
     fi
 
-    #mr_trace "check if exist background processes ..."
-    local ALLPS=`cat "${PARAM_FN_PROC}"`
-    RET=`detect_processes ${ALLPS}`
-    # ... reset to CNT=0 if exist processes
-    if [ "$RET" = "1" ]; then
-      CNT=0
+    if test -f "${PARAM_FN_PROC}"; then
+      #mr_trace "check if exist background processes ..."
+      local ALLPS=`cat "${PARAM_FN_PROC}"`
+      RET=`detect_processes ${ALLPS}`
+      # ... reset to CNT=0 if exist processes
+      if [ "$RET" = "1" ]; then
+        CNT=0
+      fi
     fi
 
     if [ "$CNT" = "0" ]; then
@@ -426,19 +432,25 @@ do_detect() {
     mv "${FN_CSV_DSTAT}" "${FN_CSV_TMP}"
     CNTRD=0
     while read LINE; do
-      mr_trace "read line: '$LINE'"
-      mr_trace "check if CPUs are idle ..."
-      mr_trace "check if disks are idle ..."
-      mr_trace "check if have large background network traffic ..."
+      #mr_trace "read line: '$LINE'" #DEBUG#
 
-      #"usr","sys","idl", "wai","stl", "read","writ", "recv","send"
-      #24.806,5.705,69.202, 0.287,0, 26528.650,105565.894, 0,0
+      # calculat the average values
+      #mr_trace "new cpu,hd,net=`echo ${LINE} | awk -F, '{print $3 "," $6 "+" $7 "(" ($6+$7) ")," $8 "+" $9 "(" ($8+$9) ")";}'`" #DEBUG#
+      #mr_trace "before update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
+      PRE_VALUES=`echo ${LINE} | awk -F, -v A=0.8 -v PRE="${PRE_VALUES}" '{split(PRE,a,","); p_cpu=a[1]; p_hd=a[2]; p_net=a[3]; p_cpu = A*p_cpu + (1.0-A)*$3; p_hd = A*p_hd + (1.0-A)*($6+$7); p_net = A*p_net + (1.0-A)*($8+$9); print p_cpu "," p_hd "," p_net;}'`
+      #mr_trace "after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
+
       # cpu >90%
       # disk r/w < 100k
       # net recv/send < 1k
-      RET=`echo $LINE | awk -F, 'BEGIN{out=0}{ if ($3 < 90.0) out=1; if ($6 > 100000) out=1;if ($7 > 100000) out=1; if ($8 > 1000) out=1;if ($9 > 1000) out=1; }END{print out;}'`
-      if [ "$RET" = "1" ]; then
-        #mr_trace "reset CNT=0"
+      #mr_trace "threshod cpu,hd,net=${PAS_CPU_THRESHOLD},${PAS_HD_THRESHOLD},${PAS_NET_THRESHOLD}" #DEBUG#
+      RET=`echo ${PRE_VALUES} | awk -F, \
+        -v CPU=${PAS_CPU_THRESHOLD} \
+        -v HD=${PAS_HD_THRESHOLD} \
+        -v NET=${PAS_NET_THRESHOLD} \
+        '{out=0; if ($1 < CPU) out=1; if ($2 > HD) out=2; if ($3 > NET) out=3; print out;}'`
+      if [ ! "$RET" = "0" ]; then
+        mr_trace "avg cpu,hd,net=${PRE_VALUES}; ret=$RET; reset CNT=0" #DEBUG#
         CNT=0
       fi
 
@@ -449,7 +461,6 @@ do_detect() {
       fi
     done < "${FN_CSV_TMP}"
     rm -f "${FN_CSV_TMP}"
-    #mr_trace "PARAM_EXPTIMES=$PARAM_EXPTIMES"
 
     if [ $CNT -gt $PARAM_EXPTIMES ]; then
       mr_trace "wake up at specific time ..."
@@ -588,10 +599,16 @@ add_temp_file "${FN_CSV_DSTAT}"
 add_temp_file "${FN_LIST_ACTIVE_IP}"
 
 # default waiting time before go to sleep
-PAS_IDLE_WAIT_TIME=600
+PAS_IDLE_WAIT_TIME=600 # second
+PAS_CPU_THRESHOLD=88   # percent
+PAS_HD_THRESHOLD=900   # Kbytes
+PAS_NET_THRESHOLD=4000 # bytes
 
-DN_CONF="/etc/powerautosave"
-if [ -f "${DN_CONF}/powerautosave.conf" ]; then
+if [ -f "./powerautosave.conf" ]; then
+  DN_CONF="."
+. ${DN_CONF}/powerautosave.conf
+elif [ -f "/etc/powerautosave/powerautosave.conf" ]; then
+  DN_CONF="/etc/powerautosave"
 . ${DN_CONF}/powerautosave.conf
 fi
 FN_IP="${DN_CONF}/pas-ip.list"

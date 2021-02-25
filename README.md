@@ -37,6 +37,7 @@ EOF
 
 # setup service
 cp powerautosave.service /etc/systemd/system/powerautosave.service
+systemctl daemon-reload
 systemctl enable powerautosave
 systemctl restart powerautosave
 ```

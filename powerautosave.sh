@@ -575,8 +575,15 @@ test_detect_ip() {
   local FN_LIST="/tmp/tmp-list-$(uuidgen)"
   rm -f "${FN_LIST}"
   touch "${FN_LIST}"
-  #ping_ip_range "10.1.1.160/27"
-  ping_ip_range "${FN_LIST}" "10.1.2.1/24"
+  # use local host external IP
+  local LIST_IF=`ip link show | egrep "^[0-9]+" | awk -F: '{print $2}' | grep -v "br-" | grep -v " lo" | grep -v " virbr" | grep -v "docker" | grep -v "veth"`
+  local IF=
+  for IF in ${LIST_IF}; do
+    IP=`ip a s dev $IF | grep "inet " | awk '{print $2}'`
+    if [ ! "$IP" = "" ]; then
+      ping_ip_range "${FN_LIST}" "$IP"
+    fi
+  done
   echo "output IP list:"
   cat "${FN_LIST}"
   rm -f "${FN_LIST}"

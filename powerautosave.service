@@ -1,0 +1,12 @@
+#/etc/systemd/system/powerautosave.service
+[Unit]
+Description=powerautosave
+
+[Service]
+Type=idle
+Environment="TERM=dumb"
+ExecStart=/etc/powerautosave/powerautosave.sh
+
+[Install]
+WantedBy=multi-user.target
+

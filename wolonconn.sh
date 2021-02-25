@@ -70,7 +70,7 @@ if [ ! -x "${EXEC_UUIDGEN}" ]; then
     exit 1
 fi
 
-intall_software() {
+install_software() {
   opkg update
   opkg install bash curl conntrack owipcalc etherwake uuidgen
 }

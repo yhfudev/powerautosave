@@ -86,31 +86,31 @@ mp_new_session
 ################################################################################
 EXEC_BASH="$(which bash)"
 if [ ! -x "${EXEC_BASH}" ]; then
-    mr_trace "[ERR] not found bash"
+    mr_trace "[ERROR] not found bash"
     exit 1
 fi
 
 EXEC_PRIPS="$(which prips)"
 if [ ! -x "${EXEC_PRIPS}" ]; then
-    mr_trace "[ERR] not found prips"
+    mr_trace "[ERROR] not found prips"
     exit 1
 fi
 
 EXEC_IPCALC="$(which ipcalc)"
 if [ ! -x "${EXEC_IPCALC}" ]; then
-    mr_trace "[ERR] not found ipcalc"
+    mr_trace "[ERROR] not found ipcalc"
     exit 1
 fi
 
 EXEC_DSTAT="$(which dstat)"
 if [ ! -x "${EXEC_DSTAT}" ]; then
-    mr_trace "[ERR] not found dstat"
+    mr_trace "[ERROR] not found dstat"
     exit 1
 fi
 
 EXEC_UUIDGEN="$(which uuidgen)"
 if [ ! -x "${EXEC_UUIDGEN}" ]; then
-    mr_trace "[ERR] not found uuidgen"
+    mr_trace "[ERROR] not found uuidgen"
     exit 1
 fi
 
@@ -118,18 +118,18 @@ install_software() {
   apt update
   apt -y install bash prips ipcalc
   #apt -y install sysstat # for mpstat
-  apt -y install pcp #for dstat
-  apt -y install uuid-runtime # uuidgen
+  apt -y install pcp # for dstat
+  apt -y install uuid-runtime # for uuidgen
 }
 
 ################################################################################
 # manage temp files
 FNLST_TEMP=
 function remove_temp_files() {
-  #mr_trace "remove FNLST_TEMP=${FNLST_TEMP}"
+  #mr_trace "[DEBUG] remove FNLST_TEMP=${FNLST_TEMP}"
   echo "${FNLST_TEMP}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
     if test -f "${a}" ; then
-      echo rm -f "${a}"
+      #mr_trace "[DEBUG] rm -f ${a}"
       rm -f "${a}"
     fi
   done
@@ -138,21 +138,21 @@ function remove_temp_files() {
 function add_temp_file() {
   local PARAM_FN=$1
   shift
-  #mr_trace "add to list: ${PARAM_FN}"
+  #mr_trace "[DEBUG] add to list: ${PARAM_FN}"
   FNLST_TEMP="${FNLST_TEMP},${PARAM_FN}"
-  #mr_trace "added FNLST_TEMP=${FNLST_TEMP}"
+  #mr_trace "[DEBUG] added FNLST_TEMP=${FNLST_TEMP}"
 }
 
 # mange background processes
 PSLST_BACK=
 function remove_processes() {
-  #mr_trace "remove PSLST_BACK=${PSLST_BACK}"
+  #mr_trace "[DEBUG] remove PSLST_BACK=${PSLST_BACK}"
   echo "${PSLST_BACK}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
     if [ ! "${a}" = "" ] ; then
-      echo kill "${a}"
-      kill -9 "${a}"
+      #mr_trace "[DEBUG] kill ${a}"
+      kill -9 "${a}" > /dev/null 2>&1
       sleep 0.5
-      kill -9 "${a}"
+      kill -9 "${a}" > /dev/null 2>&1
     fi
   done
   PSLST_BACK=
@@ -160,23 +160,23 @@ function remove_processes() {
 function add_process() {
   local PARAM_PS=$1
   shift
-  #mr_trace "add to list: ${PARAM_PS}"
+  #mr_trace "[DEBUG] add to list: ${PARAM_PS}"
   PSLST_BACK="${PSLST_BACK},${PARAM_PS}"
-  #mr_trace "added PSLST_BACK=${PSLST_BACK}"
+  #mr_trace "[DEBUG] added PSLST_BACK=${PSLST_BACK}"
 }
 
 function finish {
-  #mr_trace "remove_processes ..."
+  #mr_trace "[DEBUG] remove_processes ..."
   remove_processes
-  #mr_trace "remove_temp_files ..."
+  #mr_trace "[DEBUG] remove_temp_files ..."
   remove_temp_files
 }
 trap finish EXIT
 
 #function ctrl_c() {
-#  mr_trace "user break ..."
+#  mr_trace "[DEBUG] user break ..."
 #  finish
-#  mr_trace "exit ..."
+#  mr_trace "[DEBUG] exit ..."
 #  exit 0
 #}
 #trap ctrl_c INT
@@ -188,7 +188,6 @@ trap finish EXIT
 detect_processes() {
   local RET=0
   local PROC=""
-  #mr_trace "PARAM=$@"
   for PROC in $@; do
     if [ "$PROC" = "" ]; then
       continue
@@ -215,13 +214,13 @@ function worker_ping_ip() {
   local PARAM_FN_LIST="$1"
   shift
 
-  #mr_trace "ping -c 1 -W 1 ${PARAM_IP} ..."
+  #mr_trace "[DEBUG] ping -c 1 -W 1 ${PARAM_IP} ..."
   ping -c 1 -W 1 ${PARAM_IP} > /dev/null 2>&1
   if [ "$?" = "0" ]; then
     # awk -v rseed=$RANDOM 'BEGIN{srand(rseed);}{print rand()" "$0}'
     sleep $( echo | awk -v A=$RANDOM '{printf("%4.3f\n", (A%20+1)*0.3);}' )
     # push to the list
-    #mr_trace "add to list: ${PARAM_IP} ..."
+    #mr_trace "[DEBUG] add to list: ${PARAM_IP} ..."
     echo "${PARAM_IP}" >> ${PARAM_FN_LIST}
   fi
 
@@ -238,7 +237,7 @@ ping_ip_list_from_file() {
   shift
   local PARAM_FN_OUT=$1
   shift
-  #mr_trace "ping_ip_list_from_file ..."
+  #mr_trace "[DEBUG] ping_ip_list_from_file ..."
 
   HDFF_NUM_CLONE=300
   while read IP; do
@@ -247,7 +246,7 @@ ping_ip_list_from_file() {
     mp_add_child_check_wait ${PID_CHILD}
   done < "${PARAM_FN_IN}"
   mp_wait_all_children
-  #mr_trace "HDFF_NUM_CLONE=${HDFF_NUM_CLONE}"
+  #mr_trace "[DEBUG] HDFF_NUM_CLONE=${HDFF_NUM_CLONE}"
   HDFF_NUM_CLONE=16
 }
 
@@ -263,7 +262,7 @@ ping_ip_range() {
   shift
   local PARAM_IP2=$1
   shift
-  #mr_trace "ping_ip_range ..."
+  #mr_trace "[DEBUG] ping_ip_range ..."
 
   # ipcalc -b 192.168.0.1/24
   # prips 192.168.0.1 192.168.1.3
@@ -276,7 +275,7 @@ ping_ip_range() {
     IP1=$( ipcalc -b ${PARAM_IP1} | grep "Address:" | awk '{print $2}' )
     IP2=$( ipcalc -b ${PARAM_IP2} | grep "Address:" | awk '{print $2}' )
   fi
-  local FN_LIST="/tmp/tmp-list-$(uuidgen)"
+  local FN_LIST="/tmp/tmp-list-iprange-$(uuidgen)"
   prips $IP1 $IP2 > "${FN_LIST}"
   ping_ip_list_from_file "${FN_LIST}" "${PARAM_FN_OUT}"
   #cat "${PARAM_FN_OUT}"
@@ -372,7 +371,7 @@ enter_sleep() {
   PARAM_MODE=$1
   shift
 
-  mr_trace "enter sleep mode '${PARAM_MODE}' ..."
+  mr_trace "[INFO] enter sleep mode '${PARAM_MODE}' ..."
   sync && sleep 2 && systemctl ${PARAM_MODE} #DEBUG#
 }
 
@@ -391,7 +390,7 @@ do_detect() {
   PARAM_FN_PROC=$1
   shift
 
-  mr_trace "do_detect() ..."
+  mr_trace "[INFO] do_detect() ..."
 
   start_dstat "${FN_CSV_DSTAT}"
 
@@ -409,7 +408,7 @@ do_detect() {
     fi
     CUR_TIME=`date +%s`
     if [ `echo | awk -v p=$PRE_TIME -v off=$PARAM_EXPTIMES -v c=$CUR_TIME '{if (p<c-off) print 1; else print 0;}'` = 1 ]; then
-      mr_trace "wake up at specific time ..."
+      mr_trace "[INFO] wake up at specific time ..."
       enter_sleep suspend
       PRE_TIME=`date +%s`
       CNT=0
@@ -417,7 +416,7 @@ do_detect() {
     CNT=$(( CNT + 1 ))
 
     if test -f "${PARAM_FN_IP_PAIR}"; then
-      #mr_trace "check if host exists ..."
+      #mr_trace "[DEBUG] check if host exists ..."
       RET=`ping_list "${PARAM_FN_IP_PAIR}"`
       # ... reset to CNT=0 if exist IP
       if [ "$RET" = "1" ]; then
@@ -426,7 +425,7 @@ do_detect() {
     fi
 
     if test -f "${PARAM_FN_PROC}"; then
-      #mr_trace "check if exist background processes ..."
+      #mr_trace "[DEBUG] check if exist background processes ..."
       local ALLPS=`cat "${PARAM_FN_PROC}"`
       RET=`detect_processes ${ALLPS}`
       # ... reset to CNT=0 if exist processes
@@ -436,7 +435,7 @@ do_detect() {
     fi
 
     if [ "$CNT" = "0" ]; then
-      mr_trace "previous check reset CNT, continue"
+      mr_trace "[DEBUG] previous check reset CNT, continue"
       rm -f "${FN_CSV_DSTAT}"
       continue
     fi
@@ -444,31 +443,36 @@ do_detect() {
     mv "${FN_CSV_DSTAT}" "${FN_CSV_TMP}"
     CNTRD=0
     while read LINE; do
-      #mr_trace "read line: '$LINE'" #DEBUG#
+      #mr_trace "[DEBUG] read line: '$LINE'" #DEBUG#
 
       # calculat the average values
-      #mr_trace "new cpu,hd,net=`echo ${LINE} | awk -F, '{print $3 "," $6 "+" $7 "(" ($6+$7) ")," $8 "+" $9 "(" ($8+$9) ")";}'`" #DEBUG#
-      #mr_trace "before update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
+      #mr_trace "[DEBUG] new cpu,hd,net=`echo ${LINE} | awk -F, '{print $3 "," $6 "+" $7 "(" ($6+$7) ")," $8 "+" $9 "(" ($8+$9) ")";}'`" #DEBUG#
+      #mr_trace "[DEBUG] before update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
       PRE_VALUES=`echo ${LINE} | awk -F, -v A=0.8 -v PRE="${PRE_VALUES}" '{split(PRE,a,","); p_cpu=a[1]; p_hd=a[2]; p_net=a[3]; p_cpu = A*p_cpu + (1.0-A)*$3; p_hd = A*p_hd + (1.0-A)*($6+$7); p_net = A*p_net + (1.0-A)*($8+$9); print p_cpu "," p_hd "," p_net;}'`
-      #mr_trace "after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
+      #mr_trace "[DEBUG] after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
+      # check the values
+      RET=`echo ${PRE_VALUES} | awk -F, '{out=0; if ($1 > 100) out=1; if ($2 > 100000) out=2; if ($3 > 100000) out=3; print out;}'`
+      if [ ! "$RET" = "0" ]; then
+        mr_trace "[WARNING] detected abnormal values; avg cpu,hd,net=${PRE_VALUES}; line=${LINE};" #DEBUG#
+      fi
 
       # cpu >90%
       # disk r/w < 100k
       # net recv/send < 1k
-      #mr_trace "threshod cpu,hd,net=${PAS_CPU_THRESHOLD},${PAS_HD_THRESHOLD},${PAS_NET_THRESHOLD}" #DEBUG#
+      #mr_trace "[DEBUG] threshod cpu,hd,net=${PAS_CPU_THRESHOLD},${PAS_HD_THRESHOLD},${PAS_NET_THRESHOLD}" #DEBUG#
       RET=`echo ${PRE_VALUES} | awk -F, \
         -v CPU=${PAS_CPU_THRESHOLD} \
         -v HD=${PAS_HD_THRESHOLD} \
         -v NET=${PAS_NET_THRESHOLD} \
         '{out=0; if ($1 < CPU) out=1; if ($2 > HD) out=2; if ($3 > NET) out=3; print out;}'`
       if [ ! "$RET" = "0" ]; then
-        mr_trace "avg cpu,hd,net=${PRE_VALUES}; ret=$RET; reset CNT=0" #DEBUG#
+        mr_trace "[INFO] avg cpu,hd,net=${PRE_VALUES}; ret=$RET; reset CNT=0" #DEBUG#
         CNT=0
       fi
 
       CNTRD=$(( CNTRD + 1 ))
       if [ $CNTRD -gt 5 ]; then
-        #mr_trace "break CNT=$CNT"
+        #mr_trace "[DEBUG] break CNT=$CNT"
         break
       fi
     done < "${FN_CSV_TMP}"
@@ -508,8 +512,8 @@ assert ()                 #  If condition false,
 
 test_add_temp_files() {
   FNLST_TEMP=
-  local FN_TEST1="/tmp/tmp-test-$(uuidgen)"
-  local FN_TEST2="/tmp/tmp-test-$(uuidgen)"
+  local FN_TEST1="/tmp/tmp-test1-$(uuidgen)"
+  local FN_TEST2="/tmp/tmp-test1-$(uuidgen)"
   touch "${FN_TEST1}"
   touch "${FN_TEST2}"
   assert $LINENO " -f ${FN_TEST1} "
@@ -564,7 +568,6 @@ test_detect_processes() {
   local RET1=0
 
   RET1=`detect_processes bash`
-  #mr_trace "RET1=${RET1}"
   assert $LINENO "'${RET1}' = '1'"
 
   RET1=`detect_processes 'abc'`
@@ -572,7 +575,7 @@ test_detect_processes() {
 }
 
 test_detect_ip() {
-  local FN_LIST="/tmp/tmp-list-$(uuidgen)"
+  local FN_LIST="/tmp/tmp-test2-list-$(uuidgen)"
   rm -f "${FN_LIST}"
   touch "${FN_LIST}"
   # use local host external IP
@@ -595,7 +598,7 @@ test_all() {
   test_detect_processes
   test_detect_ip
 
-  mr_trace "Done tests successfully!"
+  mr_trace "[INFO] Done tests successfully!"
 }
 
 add_test_config() {

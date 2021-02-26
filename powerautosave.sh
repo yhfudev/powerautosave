@@ -63,13 +63,19 @@ fi
 ##
 ## pass a message to log file, and also to stdout
 mr_trace() {
-    #echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
+  if [ "${UNIT_TEST}" = "1" ]; then
+    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
+  else
     logger -t powerautosave "$@" #DEBUG#
+  fi
 }
 
 fatal_error() {
-  #echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] FATAL: $@" | tee -a ${FN_LOG} 1>&2
-  logger -t powerautosave "[FATAL] $@"
+  if [ "${UNIT_TEST}" = "1" ]; then
+    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] FATAL: $@" | tee -a ${FN_LOG} 1>&2
+  else
+    logger -t powerautosave "[FATAL] $@"
+  fi
   exit 1
 }
 
@@ -654,26 +660,30 @@ add_test_config() {
   echo "bash" >> "${FN_PROC}"
 }
 
-#add_test_config
-#test_all
+if [ "${UNIT_TEST}" = "1" ]; then
+  #add_test_config
+  test_all
 
-add_temp_file "${FN_CSV_DSTAT}"
-add_temp_file "${FN_LIST_ACTIVE_IP}"
+else
+  # main
+  add_temp_file "${FN_CSV_DSTAT}"
+  add_temp_file "${FN_LIST_ACTIVE_IP}"
 
-# default waiting time before go to sleep
-PAS_IDLE_WAIT_TIME=600 # second
-PAS_CPU_THRESHOLD=88   # percent
-PAS_HD_THRESHOLD=900   # Kbytes
-PAS_NET_THRESHOLD=4000 # bytes
+  # default waiting time before go to sleep
+  PAS_IDLE_WAIT_TIME=600 # second
+  PAS_CPU_THRESHOLD=88   # percent
+  PAS_HD_THRESHOLD=900   # Kbytes
+  PAS_NET_THRESHOLD=4000 # bytes
 
-if [ -f "./powerautosave.conf" ]; then
-  DN_CONF="."
-. ${DN_CONF}/powerautosave.conf
-elif [ -f "/etc/powerautosave/powerautosave.conf" ]; then
-  DN_CONF="/etc/powerautosave"
-. ${DN_CONF}/powerautosave.conf
+  if [ -f "./powerautosave.conf" ]; then
+    DN_CONF="."
+  . ${DN_CONF}/powerautosave.conf
+  elif [ -f "/etc/powerautosave/powerautosave.conf" ]; then
+    DN_CONF="/etc/powerautosave"
+  . ${DN_CONF}/powerautosave.conf
+  fi
+  FN_IP="${DN_CONF}/pas-ip.list"
+  FN_PROC="${DN_CONF}/pas-proc.list"
+  do_detect ${PAS_IDLE_WAIT_TIME} "${FN_IP}" "${FN_PROC}"
+
 fi
-FN_IP="${DN_CONF}/pas-ip.list"
-FN_PROC="${DN_CONF}/pas-proc.list"
-do_detect ${PAS_IDLE_WAIT_TIME} "${FN_IP}" "${FN_PROC}"
-

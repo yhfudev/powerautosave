@@ -412,6 +412,7 @@ do_detect() {
       enter_sleep suspend
       PRE_TIME=`date +%s`
       CNT=0
+      PRE_VALUES="0,0,0"
     fi
     CNT=$(( CNT + 1 ))
 

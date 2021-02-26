@@ -480,7 +480,7 @@ do_detect() {
       PRE_VALUES=`echo ${LINE} | awk -F, -v A=0.8 -v PRE="${PRE_VALUES}" '{split(PRE,a,","); p_cpu=a[1]; p_hd=a[2]; p_net=a[3]; p_cpu = A*p_cpu + (1.0-A)*$3; p_hd = A*p_hd + (1.0-A)*($6+$7); p_net = A*p_net + (1.0-A)*($8+$9); print p_cpu "," p_hd "," p_net;}'`
       #mr_trace "[DEBUG] after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
       # check the values
-      RET=`echo ${PRE_VALUES} | awk -F, '{out=0; if ($1 > 100) out=1; if ($2 > 100000) out=2; if ($3 > 100000) out=3; print out;}'`
+      RET=`echo ${PRE_VALUES} | awk -F, '{out=0; if ($1 > 100) out=1; if ($2 > 200000) out=2; if ($3 > 5000000) out=3; print out;}'`
       if [ ! "$RET" = "0" ]; then
         mr_trace "[WARNING] detected abnormal values at [${RET}]; avg cpu,hd,net=${PRE_VALUES}; line=${LINE};" #DEBUG#
       fi

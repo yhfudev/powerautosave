@@ -323,14 +323,14 @@ uci_generate_server_list() {
   shift
   #uci show wolonconn
 
-  mr_trace "[DEBUG] check_conn_send_wol tmp='${FN_TMP}'" #DEBUG#
+  #mr_trace "[DEBUG] check_conn_send_wol tmp='${FN_TMP}'" #DEBUG#
 
   local NUM_SVR=`uci show wolonconn | egrep 'wolonconn.@server\[[0-9]+\]=' | sort | uniq | wc -l`
-  mr_trace "[DEBUG] NUM_SVR=${NUM_SVR}" #DEBUG#
+  #mr_trace "[DEBUG] NUM_SVR=${NUM_SVR}" #DEBUG#
   #if [[ ${CNT} < $NUM_SVR ]]; then echo "ok"; else echo "fail"; fi
   local CNT=0
   while [ `echo | awk -v A=${CNT} -v B=${NUM_SVR} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
-    mr_trace "[DEBUG] CNT=${CNT}" #DEBUG#
+    #mr_trace "[DEBUG] CNT=${CNT}" #DEBUG#
     local CONF_INTF=`uci -q get wolonconn.@server[${CNT}].interface`
     local CONF_MAC=`uci -q get wolonconn.@server[${CNT}].mac`
     local CONF_IP=
@@ -339,7 +339,7 @@ uci_generate_server_list() {
     CNT=$(( CNT + 1 ))
 
     if [ "${CONF_HOST}" = "" ]; then
-      mr_trace "[WARNING] not set host='${CONF_HOST}': mac=${CONF_MAC}; ports=${CONF_PORTS};" #DEBUG#
+      #mr_trace "[WARNING] not set host='${CONF_HOST}': mac=${CONF_MAC}; ports=${CONF_PORTS};" #DEBUG#
       continue
     fi
     # detect the IP address

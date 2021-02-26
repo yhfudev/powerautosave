@@ -69,13 +69,13 @@ uci set wolonconn.basic.filetemp='/tmp/wol-on-conn.temp'
 uci set wolonconn.basic.filelog='/tmp/wol-on-conn.log'
 
 uci add wolonconn server
-uci set wolonconn.@server[-1].ip='10.1.1.178'
+uci set wolonconn.@server[-1].host='datahub.fu'
 uci set wolonconn.@server[-1].ports='22 80 443'
 #uci set wolonconn.@server[-1].interface='br-lan'
 #uci set wolonconn.@server[-1].mac='11:22:33:44:55:01'
 
 uci add wolonconn server
-uci set wolonconn.@server[-1].ip='10.1.1.23'
+uci set wolonconn.@server[-1].host='10.1.1.23'
 uci set wolonconn.@server[-1].ports='22 80'
 
 uci add wolonconn client

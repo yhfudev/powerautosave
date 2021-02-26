@@ -26,7 +26,7 @@ mr_trace() {
   if [ "${UNIT_TEST}" = "1" ]; then
     echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
   else
-    logger -t powerautosave "$@" #DEBUG#
+    logger -t wolonconn "$@" #DEBUG#
   fi
 }
 
@@ -34,7 +34,7 @@ fatal_error() {
   if [ "${UNIT_TEST}" = "1" ]; then
     echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] FATAL: $@" | tee -a ${FN_LOG} 1>&2
   else
-    logger -t powerautosave "[FATAL] $@"
+    logger -t wolonconn "[FATAL] $@"
   fi
   exit 1
 }

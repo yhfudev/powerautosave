@@ -454,7 +454,7 @@ do_detect() {
       # check the values
       RET=`echo ${PRE_VALUES} | awk -F, '{out=0; if ($1 > 100) out=1; if ($2 > 100000) out=2; if ($3 > 100000) out=3; print out;}'`
       if [ ! "$RET" = "0" ]; then
-        mr_trace "[WARNING] detected abnormal values; avg cpu,hd,net=${PRE_VALUES}; line=${LINE};" #DEBUG#
+        mr_trace "[WARNING] detected abnormal values at [${RET}]; avg cpu,hd,net=${PRE_VALUES}; line=${LINE};" #DEBUG#
       fi
 
       # cpu >90%
@@ -467,7 +467,7 @@ do_detect() {
         -v NET=${PAS_NET_THRESHOLD} \
         '{out=0; if ($1 < CPU) out=1; if ($2 > HD) out=2; if ($3 > NET) out=3; print out;}'`
       if [ ! "$RET" = "0" ]; then
-        mr_trace "[INFO] avg cpu,hd,net=${PRE_VALUES}; ret=$RET; reset CNT=0" #DEBUG#
+        #mr_trace "[INFO] avg cpu,hd,net=${PRE_VALUES}; ret=$RET; reset CNT=0" #DEBUG#
         CNT=0
       fi
 

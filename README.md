@@ -2,6 +2,12 @@
 
 Some scripts for saving PC power.
 
+## Setup suspend+hibernation hybrid mode to avoid power lose (Ubuntu)
+
+TODO
+
+Avoiding to use SSD as swap partition, to save on writes to the flash drive.
+
 
 ## Install powerautosave.sh (Ubuntu)
 
@@ -24,7 +30,7 @@ touch "${DN_CONF}/pas-ip.list"
 
 # the processes list, the server will enter to sleep if none is running.
 touch "${DN_CONF}/pas-proc.list"
-# echo "wget" >> "${DN_CONF}/pas-proc.list"
+# echo "wget scp rsync" >> "${DN_CONF}/pas-proc.list"
 
 # setup the waiting time before sleep in config file
 cat >> "${DN_CONF}/powerautosave.conf" <<EOF

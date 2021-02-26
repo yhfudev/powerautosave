@@ -252,11 +252,23 @@ uci_generate_server_list() {
   while [ `echo | awk -v A=${CNT} -v B=${NUM_SVR} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
     local CONF_INTF=`uci get wolonconn.@server[${CNT}].interface`
     local CONF_MAC=`uci get wolonconn.@server[${CNT}].mac`
-    local CONF_IP=`uci get wolonconn.@server[${CNT}].ip`
+    local CONF_IP=
+    local CONF_HOST=`uci get wolonconn.@server[${CNT}].host`
     local CONF_PORTS=`uci get wolonconn.@server[${CNT}].ports`
 
     if [ "${CONF_IP}" = "" ]; then
       #mr_trace "[WARN] not set server ip: mac=${CONF_MAC}; ports=${CONF_PORTS}"
+      continue
+    fi
+    # detect the IP address
+    nslookup "${CONF_HOST}" | grep "-addr.arpa"
+    if [ "$?" = "0" ]; then
+      CONF_IP="${CONF_HOST}"
+    else
+      CONF_IP=`nslookup "${CONF_IP}" | grep "Address 1" | awk -F: '{print $2}'`
+    fi
+    if [ "${CONF_IP}" = "" ]; then
+      mr_trace "[WARN] not available of server ip: mac=${CONF_MAC}; ports=${CONF_PORTS}"
       continue
     fi
     if [ "${CONF_PORTS}" = "" ]; then
@@ -437,9 +449,10 @@ test_all() {
 #   option freegeoip 'https://freegeoip.app/csv/$clientip'
 #
 # config server 'xxx'
+#   option host 'datahub.fu'
+#   option ports '80 443'
 #   option interface 'coredata'
 #   option mac 'xx:xx:xx:xx:xx:xx'
-#   option ports '80 443'
 # config client 'yyy'
 #   option iprange '192.168.1.0/24'
 # config client 'zzz'
@@ -455,13 +468,13 @@ add_test_config() {
   uci set wolonconn.basic.filelog='/tmp/wol-on-conn.log'
 
   uci add wolonconn server
-  uci set wolonconn.@server[-1].ip='10.1.1.178'
+  uci set wolonconn.@server[-1].host='datahub.fu'
   uci set wolonconn.@server[-1].ports='22 80 443'
   #uci set wolonconn.@server[-1].interface='br-lan'
   #uci set wolonconn.@server[-1].mac='11:22:33:44:55:01'
 
   uci add wolonconn server
-  uci set wolonconn.@server[-1].ip='10.1.1.23'
+  uci set wolonconn.@server[-1].host='10.1.1.23'
   uci set wolonconn.@server[-1].ports='22 80'
   #uci set wolonconn.@server[-1].interface='br-coredata'
   #uci set wolonconn.@server[-1].mac='11:22:33:44:55:02'

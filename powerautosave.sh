@@ -123,13 +123,48 @@ install_software() {
 }
 
 ################################################################################
-# manage temp files
+# register routines which will be called on exit
+RTLST_ONEXIT=
+function on_exit_run_routines() {
+  #mr_trace "[DEBUG] remove RTLST_ONEXIT=${RTLST_ONEXIT}"
+  echo "${RTLST_ONEXIT}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+    if [ ! "${a}" = "" ] ; then
+      mr_trace "[INFO] run ${a}"
+      ${a}
+    fi
+  done
+  RTLST_ONEXIT=
+}
+function on_exit_register() {
+  local PARAM_PS=$1
+  shift
+  #mr_trace "[DEBUG] add to list: ${PARAM_PS}"
+  RTLST_ONEXIT="${RTLST_ONEXIT},${PARAM_PS}"
+  #mr_trace "[DEBUG] added RTLST_ONEXIT=${RTLST_ONEXIT}"
+}
+
+function finish {
+  #mr_trace "[DEBUG] on_exit_run_routines ..."
+  on_exit_run_routines
+}
+trap finish EXIT
+
+#function ctrl_c() {
+#  mr_trace "[DEBUG] user break ..."
+#  finish
+#  mr_trace "[DEBUG] exit ..."
+#  exit 0
+#}
+#trap ctrl_c INT
+
+################################################################################
+# record temp files and delete it on exit
 FNLST_TEMP=
 function remove_temp_files() {
   #mr_trace "[DEBUG] remove FNLST_TEMP=${FNLST_TEMP}"
   echo "${FNLST_TEMP}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
     if test -f "${a}" ; then
-      #mr_trace "[DEBUG] rm -f ${a}"
+      mr_trace "[DEBUG] rm -f ${a}"
       rm -f "${a}"
     fi
   done
@@ -143,13 +178,13 @@ function add_temp_file() {
   #mr_trace "[DEBUG] added FNLST_TEMP=${FNLST_TEMP}"
 }
 
-# mange background processes
+# record background process IDs and kill on exit
 PSLST_BACK=
 function remove_processes() {
   #mr_trace "[DEBUG] remove PSLST_BACK=${PSLST_BACK}"
   echo "${PSLST_BACK}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
     if [ ! "${a}" = "" ] ; then
-      #mr_trace "[DEBUG] kill ${a}"
+      mr_trace "[DEBUG] kill ${a}"
       kill -9 "${a}" > /dev/null 2>&1
       sleep 0.5
       kill -9 "${a}" > /dev/null 2>&1
@@ -165,21 +200,8 @@ function add_process() {
   #mr_trace "[DEBUG] added PSLST_BACK=${PSLST_BACK}"
 }
 
-function finish {
-  #mr_trace "[DEBUG] remove_processes ..."
-  remove_processes
-  #mr_trace "[DEBUG] remove_temp_files ..."
-  remove_temp_files
-}
-trap finish EXIT
-
-#function ctrl_c() {
-#  mr_trace "[DEBUG] user break ..."
-#  finish
-#  mr_trace "[DEBUG] exit ..."
-#  exit 0
-#}
-#trap ctrl_c INT
+on_exit_register remove_processes
+on_exit_register remove_temp_files
 
 ################################################################################
 
@@ -531,6 +553,16 @@ test_add_temp_files() {
   rm -f "${FN_TEST2}"
 }
 
+test_onexit_temp_files() {
+  # for exit
+  local FN_TEST1="/tmp/tmp-test1-$(uuidgen)"
+  local FN_TEST2="/tmp/tmp-test1-$(uuidgen)"
+  touch "${FN_TEST1}"
+  touch "${FN_TEST2}"
+  add_temp_file "${FN_TEST1}"
+  add_temp_file "${FN_TEST2}"
+}
+
 test_add_process() {
   local PID_1=
   local PID_2=
@@ -565,6 +597,13 @@ test_add_process() {
   assert $LINENO " $RET = 1 "
 }
 
+test_onexit_processes() {
+  # for exit
+  sleep 10000 &
+  PID_1=$!
+  add_process $PID_1
+}
+
 test_detect_processes() {
   local RET1=0
 
@@ -596,6 +635,10 @@ test_detect_ip() {
 test_all() {
   test_add_process
   test_add_temp_files
+
+  test_onexit_temp_files
+  test_onexit_processes
+
   test_detect_processes
   test_detect_ip
 
@@ -612,7 +655,7 @@ add_test_config() {
 }
 
 #add_test_config
-test_all
+#test_all
 
 add_temp_file "${FN_CSV_DSTAT}"
 add_temp_file "${FN_LIST_ACTIVE_IP}"

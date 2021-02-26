@@ -92,32 +92,32 @@ mp_new_session
 ################################################################################
 EXEC_BASH="$(which bash)"
 if [ ! -x "${EXEC_BASH}" ]; then
-    mr_trace "[ERROR] not found bash"
-    exit 1
+  echo "[ERROR] not found bash"
+  exit 1
 fi
 
 EXEC_PRIPS="$(which prips)"
 if [ ! -x "${EXEC_PRIPS}" ]; then
-    mr_trace "[ERROR] not found prips"
-    exit 1
+  echo "[ERROR] not found prips"
+  exit 1
 fi
 
 EXEC_IPCALC="$(which ipcalc)"
 if [ ! -x "${EXEC_IPCALC}" ]; then
-    mr_trace "[ERROR] not found ipcalc"
-    exit 1
+  echo "[ERROR] not found ipcalc"
+  exit 1
 fi
 
 EXEC_DSTAT="$(which dstat)"
 if [ ! -x "${EXEC_DSTAT}" ]; then
-    mr_trace "[ERROR] not found dstat"
-    exit 1
+  echo "[ERROR] not found dstat"
+  exit 1
 fi
 
 EXEC_UUIDGEN="$(which uuidgen)"
 if [ ! -x "${EXEC_UUIDGEN}" ]; then
-    mr_trace "[ERROR] not found uuidgen"
-    exit 1
+  echo "[ERROR] not found uuidgen"
+  exit 1
 fi
 
 install_software() {

@@ -23,65 +23,119 @@ fi
 ##
 ## pass a message to log file, and also to stdout
 mr_trace() {
-    #echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
-    logger -t wolonconn "$@"
+  if [ "${UNIT_TEST}" = "1" ]; then
+    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
+  else
+    logger -t powerautosave "$@" #DEBUG#
+  fi
+}
+
+fatal_error() {
+  if [ "${UNIT_TEST}" = "1" ]; then
+    echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] FATAL: $@" | tee -a ${FN_LOG} 1>&2
+  else
+    logger -t powerautosave "[FATAL] $@"
+  fi
+  exit 1
 }
 
 ################################################################################
 EXEC_BASH="$(which bash)"
 if [ ! -x "${EXEC_BASH}" ]; then
-    mr_trace "[ERR] not found bash"
-    exit 1
+  echo "[ERROR] not found bash"
+  exit 1
 fi
 
 EXEC_CURL="$(which curl)"
 if [ ! -x "${EXEC_CURL}" ]; then
-    mr_trace "[ERR] not found curl"
-    exit 1
+  echo "[ERROR] not found curl"
+  exit 1
 fi
 
 EXEC_UCI="$(which uci)"
 if [ ! -x "${EXEC_UCI}" ]; then
-    mr_trace "[ERR] not found uci"
+  echo "[ERROR] not found uci"
+  if [ ! "${UNIT_TEST}" = "1" ]; then
     exit 1
+  fi
 fi
 
 EXEC_OWIPCALC="$(which owipcalc)"
 if [ ! -x "${EXEC_OWIPCALC}" ]; then
-    mr_trace "[ERR] not found owipcalc"
+  echo "[ERROR] not found owipcalc"
+  if [ ! "${UNIT_TEST}" = "1" ]; then
     exit 1
+  fi
 fi
 
 EXEC_ETHERWAKE="$(which etherwake)"
 if [ ! -x "${EXEC_ETHERWAKE}" ]; then
-    mr_trace "[ERR] not found etherwake"
-    exit 1
+  echo "[ERROR] not found etherwake"
+  exit 1
 fi
 
 EXEC_CONNTRACK="$(which conntrack)"
 if [ ! -x "${EXEC_CONNTRACK}" ]; then
-    mr_trace "[ERR] not found conntrack"
+  echo "[ERROR] not found conntrack"
+  if [ ! "${UNIT_TEST}" = "1" ]; then
     exit 1
+  fi
 fi
 
 EXEC_UUIDGEN="$(which uuidgen)"
 if [ ! -x "${EXEC_UUIDGEN}" ]; then
-    mr_trace "[ERR] not found uuidgen"
-    exit 1
+  echo "[ERROR] not found uuidgen"
+  exit 1
 fi
 
 install_software() {
   opkg update
   opkg install bash curl conntrack owipcalc etherwake uuidgen
 }
+
 ################################################################################
-# manage temp files
+# register routines which will be called on exit
+RTLST_ONEXIT=
+function on_exit_run_routines() {
+  #mr_trace "[DEBUG] remove RTLST_ONEXIT=${RTLST_ONEXIT}"
+  echo "${RTLST_ONEXIT}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+    if [ ! "${a}" = "" ] ; then
+      mr_trace "[INFO] run ${a}"
+      ${a}
+    fi
+  done
+  RTLST_ONEXIT=
+}
+function on_exit_register() {
+  local PARAM_PS=$1
+  shift
+  #mr_trace "[DEBUG] add to list: ${PARAM_PS}"
+  RTLST_ONEXIT="${RTLST_ONEXIT},${PARAM_PS}"
+  #mr_trace "[DEBUG] added RTLST_ONEXIT=${RTLST_ONEXIT}"
+}
+
+function finish {
+  #mr_trace "[DEBUG] on_exit_run_routines ..."
+  on_exit_run_routines
+}
+trap finish EXIT
+
+#function ctrl_c() {
+#  mr_trace "[DEBUG] user break ..."
+#  finish
+#  mr_trace "[DEBUG] exit ..."
+#  exit 0
+#}
+#trap ctrl_c INT
+
+################################################################################
+# record temp files and delete it on exit
 FNLST_TEMP=
 function remove_temp_files() {
-  #mr_trace "remove FNLST_TEMP=${FNLST_TEMP}"
+  #mr_trace "[DEBUG] remove FNLST_TEMP=${FNLST_TEMP}"
   echo "${FNLST_TEMP}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
     if test -f "${a}" ; then
-      echo rm -f "${a}"
+      #mr_trace "[DEBUG] rm -f ${a}"
       rm -f "${a}"
     fi
   done
@@ -90,10 +144,35 @@ function remove_temp_files() {
 function add_temp_file() {
   local PARAM_FN=$1
   shift
-  #mr_trace "add to list: ${PARAM_FN}"
+  #mr_trace "[DEBUG] add to list: ${PARAM_FN}"
   FNLST_TEMP="${FNLST_TEMP},${PARAM_FN}"
-  #mr_trace "added FNLST_TEMP=${FNLST_TEMP}"
+  #mr_trace "[DEBUG] added FNLST_TEMP=${FNLST_TEMP}"
 }
+
+# record background process IDs and kill on exit
+PSLST_BACK=
+function remove_processes() {
+  #mr_trace "[DEBUG] remove PSLST_BACK=${PSLST_BACK}"
+  echo "${PSLST_BACK}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+    if [ ! "${a}" = "" ] ; then
+      #mr_trace "[DEBUG] kill ${a}"
+      kill -9 "${a}" > /dev/null 2>&1
+      sleep 0.5
+      kill -9 "${a}" > /dev/null 2>&1
+    fi
+  done
+  PSLST_BACK=
+}
+function add_process() {
+  local PARAM_PS=$1
+  shift
+  #mr_trace "[DEBUG] add to list: ${PARAM_PS}"
+  PSLST_BACK="${PSLST_BACK},${PARAM_PS}"
+  #mr_trace "[DEBUG] added PSLST_BACK=${PSLST_BACK}"
+}
+
+on_exit_register remove_processes
+on_exit_register remove_temp_files
 
 ################################################################################
 
@@ -110,25 +189,25 @@ find_intf_by_ip() {
   local MASK=''
   local LIST_INTF=`uci show network | grep '=interface' | awk -F= '{print $1}' | awk -F. '{print $2}'`
   for INTF in ${LIST_INTF}; do
-    #mr_trace "[DBG] uci get network.${INTF}.ipaddr"
-    IP=`uci get network.${INTF}.ipaddr`
-    MASK=`uci get network.${INTF}.netmask`
+    #mr_trace "[DEBUG] uci -q get network.${INTF}.ipaddr"
+    IP=`uci -q get network.${INTF}.ipaddr`
+    MASK=`uci -q get network.${INTF}.netmask`
     if [ "${IP}" = "" ]; then
-      #mr_trace "[WARN] ignore ${INTF} ipaddr"
+      #mr_trace "[WARNING] ignore ${INTF} ipaddr"
       continue
     fi
     if [ "${MASK}" = "" ]; then
-      #mr_trace "[WARN] ignore ${INTF} netmask"
+      #mr_trace "[WARNING] ignore ${INTF} netmask"
       continue
     fi
-    #mr_trace "owipcalc ${IP}/${MASK} contains ${HOST_IP}"
+    #mr_trace "[INFO] owipcalc ${IP}/${MASK} contains ${HOST_IP}"
     local RET=`owipcalc "${IP}/${MASK}" contains ${HOST_IP}`
     if [ "$RET" = "1" ] ; then
-      local TYPE=`uci get network.${INTF}.type`
+      local TYPE=`uci -q get network.${INTF}.type`
       if [ "${TYPE}" = "bridge" ]; then
         echo "br-${INTF}"
       else
-        local IFNAME=`uci get network.${INTF}.ifname`
+        local IFNAME=`uci -q get network.${INTF}.ifname`
         echo "${IFNAME}"
       fi
       break
@@ -147,21 +226,21 @@ find_mac_by_ip() {
   local NUM_SVR=`uci show dhcp | egrep 'dhcp.@host\[[0-9]+\]=' | sort | uniq | wc -l`
   local CNT=0
   while [ `echo | awk -v A=${CNT} -v B=${NUM_SVR} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
-    #mr_trace "[DBG] CNT=${CNT}; NUM2=${NUM_SVR}"
-    #mr_trace "[DBG] uci get dhcp.@host[${CNT}].ip"
-    IP=`uci get dhcp.@host[${CNT}].ip`
-    #mr_trace "[DBG] IP=${IP}; HOST_IP=${HOST_IP}"
+    #mr_trace "[DEBUG] CNT=${CNT}; NUM2=${NUM_SVR}"
+    #mr_trace "[DEBUG] uci -q get dhcp.@host[${CNT}].ip"
+    IP=`uci -q get dhcp.@host[${CNT}].ip`
+    #mr_trace "[DEBUG] IP=${IP}; HOST_IP=${HOST_IP}"
     if [ "${IP}" = "${HOST_IP}" ]; then
-      #mr_trace "[DBG] uci get dhcp.@host[${CNT}].mac"
-      MAC=`uci get dhcp.@host[${CNT}].mac 2>&1`
+      #mr_trace "[DEBUG] uci -q get dhcp.@host[${CNT}].mac"
+      MAC=`uci -q get dhcp.@host[${CNT}].mac 2>&1`
       if [ $? = 0 ]; then
-        #mr_trace "[DBG] MAC=$MAC"
+        #mr_trace "[DEBUG] MAC=$MAC"
         echo ${MAC}
       fi
       break
     fi
     CNT=$(( CNT + 1 ))
-    #mr_trace "[DBG] CNT=${CNT}"
+    #mr_trace "[DEBUG] CNT=${CNT}"
   done
 }
 
@@ -176,8 +255,8 @@ uci_generate_client_list() {
   #if [[ ${CNT1} < $NUM_SVR ]]; then echo "ok"; else echo "fail"; fi
   local CNT1=0
   while [ `echo | awk -v A=${CNT1} -v B=${NUM_CLI} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
-    local CONF_REGION=`uci get wolonconn.@client[${CNT1}].region`
-    local CONF_IPRANGE=`uci get wolonconn.@client[${CNT1}].iprange`
+    local CONF_REGION=`uci -q get wolonconn.@client[${CNT1}].region`
+    local CONF_IPRANGE=`uci -q get wolonconn.@client[${CNT1}].iprange`
     #mr_trace "[INFO] client[${CNT1}].iprange=${CONF_IPRANGE}; region=${CONF_REGION}"
     echo "${CONF_IPRANGE},${CONF_REGION}" >> "${FN_OUT_CLI}"
     CNT1=$(( CNT1 + 1 ))
@@ -244,35 +323,38 @@ uci_generate_server_list() {
   shift
   #uci show wolonconn
 
-  #mr_trace "[INFO] check_conn_send_wol tmp='${FN_TMP}'"
+  mr_trace "[DEBUG] check_conn_send_wol tmp='${FN_TMP}'" #DEBUG#
 
   local NUM_SVR=`uci show wolonconn | egrep 'wolonconn.@server\[[0-9]+\]=' | sort | uniq | wc -l`
+  mr_trace "[DEBUG] NUM_SVR=${NUM_SVR}" #DEBUG#
   #if [[ ${CNT} < $NUM_SVR ]]; then echo "ok"; else echo "fail"; fi
   local CNT=0
   while [ `echo | awk -v A=${CNT} -v B=${NUM_SVR} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
-    local CONF_INTF=`uci get wolonconn.@server[${CNT}].interface`
-    local CONF_MAC=`uci get wolonconn.@server[${CNT}].mac`
+    mr_trace "[DEBUG] CNT=${CNT}" #DEBUG#
+    local CONF_INTF=`uci -q get wolonconn.@server[${CNT}].interface`
+    local CONF_MAC=`uci -q get wolonconn.@server[${CNT}].mac`
     local CONF_IP=
-    local CONF_HOST=`uci get wolonconn.@server[${CNT}].host`
-    local CONF_PORTS=`uci get wolonconn.@server[${CNT}].ports`
+    local CONF_HOST=`uci -q get wolonconn.@server[${CNT}].host`
+    local CONF_PORTS=`uci -q get wolonconn.@server[${CNT}].ports`
+    CNT=$(( CNT + 1 ))
 
-    if [ "${CONF_IP}" = "" ]; then
-      #mr_trace "[WARN] not set server ip: mac=${CONF_MAC}; ports=${CONF_PORTS}"
+    if [ "${CONF_HOST}" = "" ]; then
+      mr_trace "[WARNING] not set host='${CONF_HOST}': mac=${CONF_MAC}; ports=${CONF_PORTS};" #DEBUG#
       continue
     fi
     # detect the IP address
-    nslookup "${CONF_HOST}" | grep "-addr.arpa"
+    nslookup "${CONF_HOST}" | grep "\-addr.arpa"
     if [ "$?" = "0" ]; then
       CONF_IP="${CONF_HOST}"
     else
-      CONF_IP=`nslookup "${CONF_IP}" | grep "Address 1" | awk -F: '{print $2}'`
+      CONF_IP=`nslookup "${CONF_HOST}" | grep "Address 1" | awk -F: '{print $2}'`
     fi
     if [ "${CONF_IP}" = "" ]; then
-      mr_trace "[WARN] not available of server ip: mac=${CONF_MAC}; ports=${CONF_PORTS}"
+      mr_trace "[WARNING] not available of server ip: host='${CONF_HOST}'; mac=${CONF_MAC}; ports=${CONF_PORTS};"
       continue
     fi
     if [ "${CONF_PORTS}" = "" ]; then
-      #mr_trace "[WARN] not set server port: mac=${CONF_MAC}; ip=${CONF_IP}"
+      #mr_trace "[WARNING] not set server port: mac=${CONF_MAC}; ip=${CONF_IP}"
       continue
     fi
     if [ "${CONF_MAC}" = "" ]; then
@@ -285,11 +367,11 @@ uci_generate_server_list() {
     fi
 
     if [ "${CONF_MAC}" = "" ]; then
-      mr_trace "[WARN] unable to find the mac of ${CONF_IP}"
+      mr_trace "[WARNING] unable to find the mac of ${CONF_IP}"
       continue
     fi
     if [ "${CONF_INTF}" = "" ]; then
-      mr_trace "[WARN] unable to find the network interface of ${CONF_IP}"
+      mr_trace "[WARNING] unable to find the network interface of ${CONF_IP}"
       continue
     fi
 
@@ -298,7 +380,6 @@ uci_generate_server_list() {
       echo "${CONF_INTF},${CONF_MAC},${CONF_IP},${PORT}" >> "${FN_OUT_SVR}"
     done
 
-    CNT=$(( CNT + 1 ))
   done
 }
 
@@ -335,27 +416,26 @@ check_conn_send_wol() {
 }
 
 ################################################################################
-
-run_svr() {
+main() {
   local FN_TMP=''
   local FN_LST_SVR="/tmp/tmp-svrlst-$(uuidgen)"
   local FN_LST_CLI="/tmp/tmp-clilst-$(uuidgen)"
 
   local FN_LOG1=''
-  FN_LOG1=`uci get wolonconn.basic.filelog`
+  FN_LOG1=`uci -q get wolonconn.basic.filelog`
   if [ $? = 0 ]; then
     FN_LOG="${FN_LOG1}"
     #mr_trace "[INFO] got wolonconn.basic.filelog=${FN_LOG}"
   else
-    mr_trace "[ERR] failed to get wolonconn.basic.filelog"
+    mr_trace "[ERROR] failed to get wolonconn.basic.filelog"
   fi
 
-  FN_TMP=`uci get wolonconn.basic.filetemp`
+  FN_TMP=`uci -q get wolonconn.basic.filetemp`
   if [ $? = 0 ]; then
     #mr_trace "[INFO] got wolonconn.basic.filetemp=${FN_TMP}"
     echo
   else
-    mr_trace "[ERR] failed to get wolonconn.basic.filetemp"
+    mr_trace "[ERROR] failed to get wolonconn.basic.filetemp"
     FN_TMP="/tmp/tmp-wol-$(uuidgen)"
   fi
   add_temp_file "${FN_TMP}"
@@ -373,6 +453,11 @@ run_svr() {
   done
 }
 
+if [ ! "${UNIT_TEST}" = "1" ]; then
+  mr_trace "[INFO] start wolonconn ..."
+  main
+
+else # UNIT_TEST
 ################################################################################
 assert ()                 #  If condition false,
 {                         #+ exit from script
@@ -400,12 +485,67 @@ assert ()                 #  If condition false,
   fi
 } # Insert a similar assert() function into a script you need to debug.
 
-test_in_openwrt_main() {
-  #find_intf_by_ip 10.1.1.23
+
+test_find_intf_by_ip() {
+  mr_trace "[INFO] test find_intf_by_ip"
   local INTF=`find_intf_by_ip 10.1.1.23`
-  local MAC=`find_mac_by_ip 10.1.1.23`
   assert $LINENO "'$INTF' = 'br-office'"
+}
+
+test_find_mac_by_ip() {
+  mr_trace "[INFO] test find_mac_by_ip"
+  local MAC=`find_mac_by_ip 10.1.1.23`
   assert $LINENO "'$MAC' = '00:25:31:01:C2:0A'"
+}
+
+test_uci_generate_client_list() {
+  #TODO:
+  mr_trace "[INFO] test uci_generate_client_list"
+  local FN_TMP="/tmp/tmp-wol-$(uuidgen)"
+
+  uci_generate_client_list "${FN_TMP}"
+  echo "client list file:"; cat "${FN_TMP}"
+
+  local CNT=`cat "${FN_TMP}" | wc -l`
+  assert $LINENO "'$CNT' = '1'"
+
+  rm -f "${FN_TMP}"
+}
+
+test_uci_generate_server_list() {
+  #TODO:
+  mr_trace "[INFO] test uci_generate_server_list"
+  local FN_TMP="/tmp/tmp-wol-$(uuidgen)"
+
+  uci_generate_server_list "${FN_TMP}"
+  echo "server list file:"; cat "${FN_TMP}"
+
+  local CNT=
+  CNT=`cat "${FN_TMP}" | wc -l`
+  assert $LINENO "'$CNT' = '5'"
+
+  CNT=`cat "${FN_TMP}" | grep br-netlab | wc -l`
+  assert $LINENO "'$CNT' = '3'"
+
+  CNT=`cat "${FN_TMP}" | grep br-office | wc -l`
+  assert $LINENO "'$CNT' = '2'"
+
+  rm -f "${FN_TMP}"
+}
+
+test_in_openwrt_main() {
+  if [ ! -x "${EXEC_UCI}" ]; then
+    mr_trace "[ERROR] not found uci, skip OpenWrt Unit Tests!"
+    return
+  fi
+
+  mr_trace "[DEBUG] add_test_config ..."
+  add_test_config
+
+  test_find_intf_by_ip
+  test_find_mac_by_ip
+  test_uci_generate_client_list
+  test_uci_generate_server_list
 
 #TODO: show sequence from tcpdump:
 #IP=10.1.1.178; PORT=443; tcpdump -n -r web-local-1.pcap host $IP and "tcp[tcpflags] & tcp-syn != 0" | grep ${IP}.${PORT} | awk -F, '{split($2,a," "); if (a[1] == "seq") print a[2];}' | sort | awk 'BEGIN{pre="";cnt=0;}{if (pre != $1) {if (pre != "") print cnt " " pre; cnt=0;} cnt=cnt+1; pre=$1; }END{print cnt " " pre;}'
@@ -413,33 +553,12 @@ test_in_openwrt_main() {
 #4 3707552423
 }
 
-test_add_temp_files() {
-  FNLST_TEMP=
-  local FN_TEST1="/tmp/tmp-test-$(uuidgen)"
-  local FN_TEST2="/tmp/tmp-test-$(uuidgen)"
-  touch "${FN_TEST1}"
-  touch "${FN_TEST2}"
-  assert $LINENO " -f ${FN_TEST1} "
-  assert $LINENO " -f ${FN_TEST2} "
-  assert $LINENO "'${FNLST_TEMP}' = ''"
-  add_temp_file "${FN_TEST1}"
-  add_temp_file "${FN_TEST2}"
-  assert $LINENO "! '${FNLST_TEMP}' = ''"
-  remove_temp_files
-  assert $LINENO "'${FNLST_TEMP}' = ''"
-  assert $LINENO "! -f ${FN_TEST1} "
-  assert $LINENO "! -f ${FN_TEST2} "
-  rm -f "${FN_TEST1}"
-  rm -f "${FN_TEST2}"
-}
-
 test_all() {
-  add_test_config
 
-  test_add_temp_files
-  #test_in_openwrt_main
+  mr_trace "[DEBUG] test_in_openwrt_main ..."
+  test_in_openwrt_main
 
-  mr_trace "Done tests successfully!"
+  mr_trace "[INFO] Done tests successfully!"
 }
 
 ################################################################################
@@ -457,7 +576,7 @@ test_all() {
 #   option iprange '192.168.1.0/24'
 # config client 'zzz'
 #   option region 'regionname'
-add_test_config() {
+add_test_config_wol() {
 
   rm -f /tmp/wol-on-conn.log /tmp/wol-on-conn.temp
   rm -f /etc/config/wolonconn
@@ -493,8 +612,100 @@ add_test_config() {
   uci commit wolonconn
 }
 
-#test_all
+remove_uci_section() {
+  local PARAM_SECTION=$1
+  shift
+  local PARAM_FILTER=$1
+  shift
 
-run_svr
+  # remove host config
+  local CNT=1
+  while [ `echo | awk -v A=0 -v B=${CNT} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
 
+    uci show ${PARAM_SECTION} |  awk -F. '{print $2}' | grep = | awk -F= '{print $1}' \
+      | grep "${PARAM_FILTER}" | sort -r | uniq \
+      | while read a; do uci -q delete ${PARAM_SECTION}.$a; done
 
+    CNT=`uci show ${PARAM_SECTION} |  awk -F. '{print $2}' | grep = | awk -F= '{print $1}' \
+      | grep "${PARAM_FILTER}" | sort -r | uniq | wc -l `
+
+  done
+}
+
+add_uci_host_ip_mac() {
+  local PARAM_NAME=$1
+  shift
+  local PARAM_MAC=$1
+  shift
+  local PARAM_IP=$1
+  shift
+
+  uci add dhcp host
+  uci set dhcp.@host[-1].name="${PARAM_NAME}"
+  uci set dhcp.@host[-1].mac="${PARAM_MAC}"
+  uci set dhcp.@host[-1].ip="${PARAM_IP}"
+
+  uci add dhcp domain
+  uci set dhcp.@domain[-1].name="${PARAM_NAME}"
+  uci set dhcp.@domain[-1].ip="${PARAM_IP}"
+
+  uci commit dhcp
+}
+
+add_uci_domain_record() {
+  local PARAM_NAME=$1
+  shift
+  local PARAM_IP=$1
+  shift
+
+  # dhcp.@dnsmasq[0].address='/filefetch.fu/10.1.1.23' '/datahub.fu/10.1.1.178'
+  uci add_list dhcp.@dnsmasq[0].address="/${PARAM_NAME}/${PARAM_IP}"
+  uci commit dhcp
+}
+
+add_test_config_dhcp() {
+  remove_uci_section "dhcp" "@host"
+
+  add_uci_host_ip_mac "home-nas-1"  "11:22:33:44:55:01" "10.1.1.178"
+  add_uci_host_ip_mac "home-pogoplug-v3-2" "00:25:31:01:C2:0A" "10.1.1.23"
+}
+
+add_test_config_domain() {
+  # delete
+  uci -q delete dhcp.@dnsmasq[0].address
+  # verify no data
+  uci -q get dhcp.@dnsmasq[0].address | grep datahub.fu
+  RET=$?
+  assert $LINENO "'$RET' = '1'"
+  uci -q get dhcp.@dnsmasq[0].address | grep datahub.fu
+  RET=$?
+  assert $LINENO "'$RET' = '1'"
+
+  # add test data
+  add_uci_domain_record "filefetch.fu" "10.1.1.23"
+  add_uci_domain_record "datahub.fu" "10.1.1.178"
+
+  # verify the values
+  uci -q get dhcp.@dnsmasq[0].address | grep datahub.fu
+  RET=$?
+  assert $LINENO "'$RET' = '0'"
+  uci -q get dhcp.@dnsmasq[0].address | grep filefetch.fu
+  RET=$?
+  assert $LINENO "'$RET' = '0'"
+}
+
+add_test_config() {
+  mr_trace "[ERROR] please setup the test openwrt as hostmain."
+  mr_trace "[ERROR] unit test will remove the original UCI 'dhcp@host' and 'dhcp.@dnsmasq[0].address' configs and replace with tests."
+
+  add_test_config_dhcp
+  add_test_config_domain
+  /etc/init.d/dnsmasq restart
+
+  add_test_config_wol
+}
+
+#mr_trace "[DEBUG] test_all ..."
+test_all
+
+fi # UNIT_TEST

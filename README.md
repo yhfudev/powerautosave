@@ -1,12 +1,51 @@
 # Power save scripts
 
-Some scripts for saving PC power.
 
-## Setup suspend+hibernation hybrid mode to avoid power lose (Ubuntu)
+## What it is
 
-TODO
+This project include the document and scripts to setup servers in home network to sleep when idle. It can be used for NAS/media/backup server which required 24/7 up time.
 
-Avoiding to use SSD as swap partition, to save on writes to the flash drive.
+The basic ideal is to put a sever to suspend state when host idle is detected; and the router, which installed with a wol script, will send out a WOL packet once it detect another host initiates an access request to the suspended server. The server will then power on when received the WOL packet.
+
+
+In the rest of the document, we'll setup a WOL solution for a server host running Ubuntu, and a OpenWrt router in a home network. The Ubunt server will go to sleep when idle, and waken up by the WOL packet send by OpenWrt router when there's a service request from other hosts.
+
+
+## Setup WOL on server (Ubuntu)
+
+The network interface card needs the settings of WOL. The best place to set the card would be the config file for udev, for example:
+```bash
+# /etc/udev/rules.d/70-persistent-net.rules
+SUBSYSTEM=="net", ATTR{address}=="11:22:33:44:55:66", NAME="net0", RUN+="/sbin/ethtool -s %k wol g"
+```
+
+## Setup suspend+hibernation hybrid mode (Ubuntu)
+
+This step is to set the host to suspend state, and hibernate the host if it's not activated after pre-defined interval, to avoid possible power outage lose.
+
+It will use a swap partition in HDD, the data in RAM will be dumpped to the swap partition, so the size of the partition should larger than the size of RAM memory.
+
+It also need avoiding to use SSD as swap partition, to save on writes to the flash drive.
+
+setup the hibernate time in config file /etc/systemd/sleep.conf,
+this is the interval between suspend and hibernation.
+```bash
+# /etc/systemd/sleep.conf
+HibernateDelaySec=180min
+```
+
+
+set swap partition in grub config file /etc/default/grub
+```bash
+blkid /dev/sdaX
+
+# /etc/default/grub
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash resume=UUID=5c03967e-b9fe-4a2e-8501–05002aa51dd6"
+
+sudo update-initramfs -u -k all
+sudo update-grub
+```
+
 
 
 ## Install powerautosave.sh (Ubuntu)

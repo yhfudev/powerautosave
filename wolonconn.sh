@@ -114,11 +114,11 @@ function on_exit_register() {
   #mr_trace "[DEBUG] added RTLST_ONEXIT=${RTLST_ONEXIT}"
 }
 
-function finish {
+function on_sys_exit {
   #mr_trace "[DEBUG] on_exit_run_routines ..."
   on_exit_run_routines
 }
-trap finish EXIT
+trap on_sys_exit EXIT
 
 #function ctrl_c() {
 #  mr_trace "[DEBUG] user break ..."
@@ -127,6 +127,31 @@ trap finish EXIT
 #  exit 0
 #}
 #trap ctrl_c INT
+
+
+RTLST_ONUSR1=
+function on_usr1_run_routines() {
+  #mr_trace "[DEBUG] remove RTLST_ONUSR1=${RTLST_ONUSR1}"
+  echo "${RTLST_ONUSR1}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+    if [ ! "${a}" = "" ] ; then
+      mr_trace "[INFO] run ${a}"
+      ${a}
+    fi
+  done
+}
+function on_usr1_register() {
+  local PARAM_PS=$1
+  shift
+  #mr_trace "[DEBUG] add to list: ${PARAM_PS}"
+  RTLST_ONUSR1="${RTLST_ONUSR1},${PARAM_PS}"
+  #mr_trace "[DEBUG] added RTLST_ONUSR1=${RTLST_ONUSR1}"
+}
+
+function on_event_usr1() {
+  echo "[INFO] user event"
+  on_usr1_run_routines
+}
+trap on_event_usr1 USR1
 
 ################################################################################
 # record temp files and delete it on exit
@@ -263,7 +288,12 @@ uci_generate_client_list() {
   done
 }
 
-# client_ip, interface, mac, dest, logfile
+## send a WOL packet to server host if the client IP is contained in the list file
+## @param ip_cli the client IP
+## @param intf_svr the router interface name for the server
+## @param mac_svr the MAC address of the server
+## @param dest_svr the server info, used for log
+## @param fn_lst_cli the client config file
 check_client_send_wol() {
   # the client IP
   local IP_CLI=$1
@@ -277,7 +307,7 @@ check_client_send_wol() {
   # the server info to log, such ip:port
   local DEST_SVR=$1
   shift
-  local FN_OUT_CLI=$1
+  local FN_LST_CLI=$1
   shift
 
   #mr_trace "[INFO] check_client_send_wol ip='${IP_CLI}' intf='${INTF_SVR}' mac='${MAC_SVR}' dest='${DEST_SVR}'"
@@ -308,7 +338,7 @@ EOF
       fi
     fi
 
-  done < "${FN_OUT_CLI}"
+  done < "${FN_LST_CLI}"
 
 }
 
@@ -316,14 +346,14 @@ EOF
 #   <interface>,<mac>,<ip>,<port>
 #
 # example of conntrack:
-# conntrack -L -p tcp --reply-src 10.1.1.23 --reply-port-src 80 --state SYN_SENT
-#tcp      6 119 SYN_SENT src=10.1.1.178 dst=10.1.1.23 sport=39226 dport=80 packets=3 bytes=180 [UNREPLIED] src=10.1.1.23 dst=10.1.1.178 sport=80 dport=39226 packets=0 bytes=0 mark=0 use=1
+# conntrack -L -p tcp --reply-src 10.1.1.24 --reply-port-src 80 --state SYN_SENT
+#tcp      6 119 SYN_SENT src=10.1.1.178 dst=10.1.1.24 sport=39226 dport=80 packets=3 bytes=180 [UNREPLIED] src=10.1.1.24 dst=10.1.1.178 sport=80 dport=39226 packets=0 bytes=0 mark=0 use=1
 uci_generate_server_list() {
   local FN_OUT_SVR=$1
   shift
   #uci show wolonconn
 
-  #mr_trace "[DEBUG] check_conn_send_wol tmp='${FN_TMP}'" #DEBUG#
+  #mr_trace "[DEBUG] uci_generate_server_list tmp='${FN_TMP}'" #DEBUG#
 
   local NUM_SVR=`uci show wolonconn | egrep 'wolonconn.@server\[[0-9]+\]=' | sort | uniq | wc -l`
   #mr_trace "[DEBUG] NUM_SVR=${NUM_SVR}" #DEBUG#
@@ -416,43 +446,73 @@ check_conn_send_wol() {
 }
 
 ################################################################################
+# state:
+# 0 -- exit; 1 -- normal; 2 -- reload config
+
+FN_RUN_STATE="/tmp/tmp-run-state-$(uuidgen)"
+
+get_run_state() {
+  local RET=$(cat "${FN_RUN_STATE}")
+  if [ "$RET" = "" ]; then
+    RET=0
+  fi
+  echo $RET
+}
+set_run_state() {
+  local STATE=$1
+  echo "${STATE}" > "${FN_RUN_STATE}"
+}
+
+set_reload_config() {
+  set_run_state "2"
+}
+set_exit() {
+  set_run_state "0"
+}
+
+on_exit_register set_exit
+on_usr1_register set_reload_config
+
 main() {
   local FN_TMP=''
   local FN_LST_SVR="/tmp/tmp-svrlst-$(uuidgen)"
   local FN_LST_CLI="/tmp/tmp-clilst-$(uuidgen)"
 
-  local FN_LOG1=''
-  FN_LOG1=`uci -q get wolonconn.basic.filelog`
-  if [ $? = 0 ]; then
-    FN_LOG="${FN_LOG1}"
-    #mr_trace "[INFO] got wolonconn.basic.filelog=${FN_LOG}"
-  else
-    mr_trace "[ERROR] failed to get wolonconn.basic.filelog"
-  fi
+  local RUN_STATE=1
+  while [ ! $RUN_STATE = 0 ]; do
+    mr_trace "load config ..."
+    FN_TMP=`uci -q get wolonconn.basic.filetemp`
+    if [ $? = 0 ]; then
+      #mr_trace "[INFO] got wolonconn.basic.filetemp=${FN_TMP}"
+      echo
+    else
+      mr_trace "[ERROR] failed to get wolonconn.basic.filetemp"
+      FN_TMP="/tmp/tmp-wol-$(uuidgen)"
+    fi
+    add_temp_file "${FN_TMP}"
+    add_temp_file "${FN_LST_SVR}"
+    add_temp_file "${FN_LST_CLI}"
+    add_temp_file "${FN_RUN_STATE}"
+    rm -f "${FN_TMP}" "${FN_LST_SVR}" "${FN_LST_CLI}"
 
-  FN_TMP=`uci -q get wolonconn.basic.filetemp`
-  if [ $? = 0 ]; then
-    #mr_trace "[INFO] got wolonconn.basic.filetemp=${FN_TMP}"
-    echo
-  else
-    mr_trace "[ERROR] failed to get wolonconn.basic.filetemp"
-    FN_TMP="/tmp/tmp-wol-$(uuidgen)"
-  fi
-  add_temp_file "${FN_TMP}"
+    uci_generate_server_list "${FN_LST_SVR}"
+    uci_generate_client_list "${FN_LST_CLI}"
 
-  rm -f "${FN_LST_SVR}" "${FN_LST_CLI}"
-  uci_generate_server_list "${FN_LST_SVR}"
-  uci_generate_client_list "${FN_LST_CLI}"
-  add_temp_file "${FN_LST_SVR}"
-  add_temp_file "${FN_LST_CLI}"
+    set_run_state 1
+    RUN_STATE=1
+    while [ $RUN_STATE = 1 ]; do
+      sleep 1
+      #mr_trace "[INFO] check_conn_send_wol ..."
+      check_conn_send_wol "${FN_LST_SVR}" "${FN_LST_CLI}" "${FN_TMP}"
+      RUN_STATE=$(get_run_state)
+      #mr_trace "[INFO] RUN_STATE=${RUN_STATE} ..."
+    done
 
-  while true ; do
-    sleep 1
-    #mr_trace "[INFO] check_conn_send_wol ..."
-    check_conn_send_wol "${FN_LST_SVR}" "${FN_LST_CLI}" "${FN_TMP}"
+    remove_temp_files
   done
 }
 
+#if [ 1 = 1 ]; then #
 if [ ! "${UNIT_TEST}" = "1" ]; then
   mr_trace "[INFO] start wolonconn ..."
   main
@@ -488,13 +548,13 @@ assert ()                 #  If condition false,
 
 test_find_intf_by_ip() {
   mr_trace "[INFO] test find_intf_by_ip"
-  local INTF=`find_intf_by_ip 10.1.1.23`
+  local INTF=`find_intf_by_ip 10.1.1.24`
   assert $LINENO "'$INTF' = 'br-office'"
 }
 
 test_find_mac_by_ip() {
   mr_trace "[INFO] test find_mac_by_ip"
-  local MAC=`find_mac_by_ip 10.1.1.23`
+  local MAC=`find_mac_by_ip 10.1.1.24`
   assert $LINENO "'$MAC' = '00:25:31:01:C2:0A'"
 }
 
@@ -593,7 +653,7 @@ add_test_config_wol() {
   #uci set wolonconn.@server[-1].mac='11:22:33:44:55:01'
 
   uci add wolonconn server
-  uci set wolonconn.@server[-1].host='10.1.1.23'
+  uci set wolonconn.@server[-1].host='10.1.1.24'
   uci set wolonconn.@server[-1].ports='22 80'
   #uci set wolonconn.@server[-1].interface='br-coredata'
   #uci set wolonconn.@server[-1].mac='11:22:33:44:55:02'
@@ -658,7 +718,7 @@ add_uci_domain_record() {
   local PARAM_IP=$1
   shift
 
-  # dhcp.@dnsmasq[0].address='/filefetch.fu/10.1.1.23' '/datahub.fu/10.1.1.178'
+  # dhcp.@dnsmasq[0].address='/filefetch.fu/10.1.1.24' '/datahub.fu/10.1.1.178'
   uci add_list dhcp.@dnsmasq[0].address="/${PARAM_NAME}/${PARAM_IP}"
   uci commit dhcp
 }
@@ -667,7 +727,7 @@ add_test_config_dhcp() {
   remove_uci_section "dhcp" "@host"
 
   add_uci_host_ip_mac "home-nas-1"  "11:22:33:44:55:01" "10.1.1.178"
-  add_uci_host_ip_mac "home-pogoplug-v3-2" "00:25:31:01:C2:0A" "10.1.1.23"
+  add_uci_host_ip_mac "home-pogoplug-v3-2" "00:25:31:01:C2:0A" "10.1.1.24"
 }
 
 add_test_config_domain() {
@@ -682,8 +742,8 @@ add_test_config_domain() {
   assert $LINENO "'$RET' = '1'"
 
   # add test data
-  add_uci_domain_record "filefetch.fu" "10.1.1.23"
-  add_uci_domain_record "datahub.fu" "10.1.1.178"
+  add_uci_domain_record "filefetch.fu" "10.1.1.24"
+  add_uci_domain_record "datahub.fu" "10.1.1.6"
 
   # verify the values
   uci -q get dhcp.@dnsmasq[0].address | grep datahub.fu

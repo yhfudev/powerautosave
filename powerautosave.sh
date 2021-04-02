@@ -149,11 +149,12 @@ function on_exit_register() {
   #mr_trace "[DEBUG] added RTLST_ONEXIT=${RTLST_ONEXIT}"
 }
 
-function finish {
-  #mr_trace "[DEBUG] on_exit_run_routines ..."
+function on_sys_exit {
+  mr_trace "[DEBUG] on_exit_run_routines ..."
   on_exit_run_routines
+  sleep 2
 }
-trap finish EXIT
+trap on_sys_exit EXIT
 
 #function ctrl_c() {
 #  mr_trace "[DEBUG] user break ..."
@@ -162,6 +163,31 @@ trap finish EXIT
 #  exit 0
 #}
 #trap ctrl_c INT
+
+
+RTLST_ONUSR1=
+function on_usr1_run_routines() {
+  #mr_trace "[DEBUG] remove RTLST_ONUSR1=${RTLST_ONUSR1}"
+  echo "${RTLST_ONUSR1}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+    if [ ! "${a}" = "" ] ; then
+      mr_trace "[INFO] run ${a}"
+      ${a}
+    fi
+  done
+}
+function on_usr1_register() {
+  local PARAM_PS=$1
+  shift
+  #mr_trace "[DEBUG] add to list: ${PARAM_PS}"
+  RTLST_ONUSR1="${RTLST_ONUSR1},${PARAM_PS}"
+  #mr_trace "[DEBUG] added RTLST_ONUSR1=${RTLST_ONUSR1}"
+}
+
+function on_event_usr1() {
+  echo "[INFO] user event"
+  on_usr1_run_routines
+}
+trap on_event_usr1 USR1
 
 ################################################################################
 # record temp files and delete it on exit
@@ -396,12 +422,39 @@ start_dstat() {
 # turn the host to sleep mode
 # mode: one of suspend
 enter_sleep() {
-  PARAM_MODE=$1
+  local PARAM_MODE=$1
   shift
 
   mr_trace "[INFO] enter sleep mode '${PARAM_MODE}' ..."
   sync && sleep 2 && systemctl ${PARAM_MODE} #DEBUG#
 }
+
+################################################################################
+# state:
+# 0 -- exit; 1 -- normal; 2 -- reload config
+
+FN_RUN_STATE="/tmp/tmp-run-state-$(uuidgen)"
+
+get_run_state() {
+  local  RET=$(cat "${FN_RUN_STATE}")
+  if [ "$RET" = "" ]; then
+    RET=0
+  fi
+  echo $RET
+}
+set_run_state() {
+  local STATE=$1
+  echo "${STATE}" > "${FN_RUN_STATE}"
+}
+
+set_reload_config() {
+  set_run_state "2"
+}
+set_exit() {
+  set_run_state "0"
+}
+
+on_usr1_register set_reload_config
 
 FN_CSV_DSTAT="/tmp/tmp-csv-dstat-$(uuidgen)"
 
@@ -411,11 +464,11 @@ FN_CSV_DSTAT="/tmp/tmp-csv-dstat-$(uuidgen)"
 ## @param fn_ip_pair a list of IP pairs for host IP ranges, if there's no exist any of the host, then it's idle
 ## @param fn_proc a list of process names, if there's no exist any of the process, then it's idle
 do_detect() {
-  PARAM_EXPTIMES=$1
+  local PARAM_EXPTIMES=$1
   shift
-  PARAM_FN_IP_PAIR=$1
+  local PARAM_FN_IP_PAIR=$1
   shift
-  PARAM_FN_PROC=$1
+  local PARAM_FN_PROC=$1
   shift
 
   mr_trace "[INFO] do_detect() ..."
@@ -429,7 +482,14 @@ do_detect() {
   local PRE_TIME=`date +%s`
   # cpu,disk,net
   local PRE_VALUES="0,0,0"
+  local RUN_STATE=0
   while true; do
+    RUN_STATE=$(get_run_state)
+    #mr_trace "[DEBUG] RUN_STATE=$RUN_STATE"
+    if [ ! "$RUN_STATE" = "1" ]; then
+      break
+    fi
+
     if [ "$CNT" = "0" ]; then
       # reset the timer
       PRE_TIME=`date +%s`
@@ -445,6 +505,15 @@ do_detect() {
       fi
     fi
     CNT=$(( CNT + 1 ))
+
+    RET=$(w -h | grep "pts/" | wc -l)
+    if (( $RET > 0 )); then
+      #mr_trace "[DEBUG] somebody login, continue"
+      CNT=0
+      sleep 2
+      continue
+    fi
+
 
     if test -f "${PARAM_FN_IP_PAIR}"; then
       #mr_trace "[DEBUG] check if host exists ..."
@@ -468,6 +537,11 @@ do_detect() {
     if [ "$CNT" = "0" ]; then
       mr_trace "[DEBUG] previous check reset CNT, continue"
       rm -f "${FN_CSV_DSTAT}"
+      continue
+    fi
+
+    if [ ! -f "${FN_CSV_DSTAT}" ]; then
+      sleep 2
       continue
     fi
 
@@ -511,30 +585,45 @@ do_detect() {
 
     sleep 2
   done
+  mr_trace "[DEBUG] end of do_detect"
 }
 
 main() {
-  add_temp_file "${FN_CSV_DSTAT}"
-  add_temp_file "${FN_LIST_ACTIVE_IP}"
 
-  # default waiting time before go to sleep
-  PAS_IDLE_WAIT_TIME=600 # second
-  PAS_CPU_THRESHOLD=88   # percent
-  PAS_HD_THRESHOLD=900   # Kbytes
-  PAS_NET_THRESHOLD=4000 # bytes
+  local RUN_STATE=1
+  while [ ! $RUN_STATE = 0 ]; do
+    remove_processes
+    remove_temp_files
+    add_temp_file "${FN_CSV_DSTAT}"
+    add_temp_file "${FN_LIST_ACTIVE_IP}"
+    add_temp_file "${FN_RUN_STATE}"
 
-  if [ -f "./powerautosave.conf" ]; then
-    DN_CONF="."
-  . ${DN_CONF}/powerautosave.conf
-  elif [ -f "/etc/powerautosave/powerautosave.conf" ]; then
-    DN_CONF="/etc/powerautosave"
-  . ${DN_CONF}/powerautosave.conf
-  fi
-  FN_IP="${DN_CONF}/pas-ip.list"
-  FN_PROC="${DN_CONF}/pas-proc.list"
-  do_detect ${PAS_IDLE_WAIT_TIME} "${FN_IP}" "${FN_PROC}"
+    # default waiting time before go to sleep
+    PAS_IDLE_WAIT_TIME=600 # second
+    PAS_CPU_THRESHOLD=88   # percent
+    PAS_HD_THRESHOLD=900   # Kbytes
+    PAS_NET_THRESHOLD=4000 # bytes
+
+    mr_trace "[INFO] loading config ..."
+    if [ -f "./powerautosave.conf" ]; then
+      DN_CONF="."
+    . ${DN_CONF}/powerautosave.conf
+    elif [ -f "/etc/powerautosave/powerautosave.conf" ]; then
+      DN_CONF="/etc/powerautosave"
+    . ${DN_CONF}/powerautosave.conf
+    else
+      mr_trace "[INFO] Use default config."
+    fi
+    local FN_IP="${DN_CONF}/pas-ip.list"
+    local FN_PROC="${DN_CONF}/pas-proc.list"
+
+    set_run_state 1
+    do_detect ${PAS_IDLE_WAIT_TIME} "${FN_IP}" "${FN_PROC}"
+    RUN_STATE=$(get_run_state)
+  done
 }
 
+#if [ 1 = 1 ]; then #
 if [ ! "${UNIT_TEST}" = "1" ]; then
   main
 

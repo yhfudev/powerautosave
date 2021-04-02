@@ -3,7 +3,7 @@
 
 ## What it is
 
-This project include the document and scripts to setup servers in home network to sleep when idle. It can be used for NAS/media/backup server which required 24/7 up time.
+This project include the documents and scripts to setup servers in home network to sleep when it's idle, and wake up when request arrives automatically without human involved. It can be used for NAS/media/backup server which required 24/7 up time.
 
 The basic ideal is to put a sever to suspend state when host idle is detected; and the router, which installed with a wol script, will send out a WOL packet once it detect another host initiates an access request to the suspended server. The server will then power on when received the WOL packet.
 
@@ -51,6 +51,13 @@ sudo update-grub
 ## Install powerautosave.sh (Ubuntu)
 
 powerautosave.sh is a script to turn server to sleep mode when the server is idle.
+It will turn the host to suspend mode when there're
+* nobody login to the system
+* CPU is idle, PAS_CPU_THRESHOLD
+* HDD has low IO, PAS_HD_THRESHOLD
+* network has low traffic, PAS_NET_THRESHOLD
+* system is idle for a long time, PAS_IDLE_WAIT_TIME
+
 
 ```bash
 # install packages:
@@ -87,9 +94,21 @@ systemctl enable powerautosave
 systemctl restart powerautosave
 ```
 
+To reload config:
+```bash
+kill -s SIGUSR1 $(ps -ef | grep owerautosave | grep -v grep | awk '{print $2}')
+```
+
+
 ## Install wolonconn.sh (OpenWrt)
 
 wolonconn.sh is a script to send WOL packets to active the server once a connection detected on router.
+
+Be sure that the request packet from the client to the server host will pass through the OpenWrt route. The server can be either behind the router if the packet from outsides(Internet), or in a separate virtual LAN if the packet is from the client also behind the router.
+
+And the server host should also be listed in the "DHCP and DNS -- Static Leases" table, includes its host name, IP and MAC address.
+So that the program can query the MAC address and interface for the server host.
+
 
 ```bash
 # install packages:
@@ -132,3 +151,12 @@ add the line to the /etc/rc.local, before exit
 
 exit
 ```
+
+
+To reload config:
+```bash
+kill -s SIGUSR1 $(ps | grep wolonconn | grep -v grep | awk '{print $1}')
+```
+
+
+

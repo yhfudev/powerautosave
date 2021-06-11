@@ -104,7 +104,7 @@ kill -s SIGUSR1 $(ps -ef | grep owerautosave | grep -v grep | awk '{print $2}')
 
 wolonconn.sh is a script to send WOL packets to active the server once a connection detected on router.
 
-Be sure that the request packet from the client to the server host will pass through the OpenWrt route. The server can be either behind the router if the packet from outsides(Internet), or in a separate virtual LAN if the packet is from the client also behind the router.
+Be sure that the request packet from the client to the server host will pass through the OpenWrt router. The server can be either behind the router if the packet from outsides(Internet), or in a separate virtual LAN if the packet is from the client also behind the router.
 
 And the server host should also be listed in the "DHCP and DNS -- Static Leases" table, includes its host name, IP and MAC address.
 So that the program can query the MAC address and interface for the server host.
@@ -127,7 +127,7 @@ uci set wolonconn.basic.filetemp='/tmp/wol-on-conn.temp'
 uci set wolonconn.basic.filelog='/tmp/wol-on-conn.log'
 
 uci add wolonconn server
-uci set wolonconn.@server[-1].host='datahub.fu'
+uci set wolonconn.@server[-1].host='myhostname'
 uci set wolonconn.@server[-1].ports='22 80 443'
 #uci set wolonconn.@server[-1].interface='br-lan'
 #uci set wolonconn.@server[-1].mac='11:22:33:44:55:01'

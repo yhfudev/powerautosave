@@ -7,10 +7,10 @@ This project include the documents and scripts to setup servers in home network 
 The basic ideal is to put a sever to suspend state when host idle is detected; and the router, which is installed with a WOL script, will send out a WOL packet once it detect another host initiates an access request to the suspended server. The server will then power on when received the WOL packet.
 
 
-In the rest of the document, we'll setup a WOL solution for a server host running Ubuntu, and a OpenWrt router in a home network. The Ubunt server will go to sleep when idle, and waken up by the WOL packet send by OpenWrt router when there's a service request from other hosts.
+In the rest of the document, we'll setup a WOL solution for a server host running Linux (Ubuntu), and a OpenWrt router in a home network. The Linux server (Ubuntu) will go to sleep when idle, and waken up by the WOL packet send by OpenWrt router when there's a service request from other hosts.
 
 
-## Setup WOL on server (Ubuntu)
+## Setup WOL on Linux server (Ubuntu)
 
 The network interface card needs the settings of WOL. The best place to set the card would be the config file for udev, for example:
 ```bash
@@ -47,7 +47,7 @@ sudo update-grub
 
 
 
-## Install powerautosave.sh (Ubuntu)
+## Install powerautosave.sh on Linux server (Ubuntu)
 
 powerautosave.sh is a script to turn server to sleep mode when the server is idle.
 It will turn the host to suspend mode when there're
@@ -100,7 +100,7 @@ kill -s SIGUSR1 $(ps -ef | grep owerautosave | grep -v grep | awk '{print $2}')
 ```
 
 
-## Install wolonconn.sh (OpenWrt)
+## Install wolonconn.sh on Linux router (OpenWrt)
 
 wolonconn.sh is a script to send WOL packets to active the server once a connection detected on router.
 

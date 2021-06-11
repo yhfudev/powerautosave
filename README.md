@@ -1,11 +1,10 @@
-# Power save scripts
-
+# Poor man's home PC server power saver
 
 ## What it is
 
-This project include the documents and scripts to setup servers in home network to sleep when it's idle, and wake up when request arrives automatically without human involved. It can be used for NAS/media/backup server which required 24/7 up time.
+This project include the documents and scripts to setup servers in home network to sleep when it's idle, and wake up when request arrives automatically without human involved. It can be used for NAS/media/backup server which required 24/7 up time. As a example, one of the author's PC server draw about 100W power on active, and it drop to 8W when in idle state.
 
-The basic ideal is to put a sever to suspend state when host idle is detected; and the router, which installed with a wol script, will send out a WOL packet once it detect another host initiates an access request to the suspended server. The server will then power on when received the WOL packet.
+The basic ideal is to put a sever to suspend state when host idle is detected; and the router, which is installed with a WOL script, will send out a WOL packet once it detect another host initiates an access request to the suspended server. The server will then power on when received the WOL packet.
 
 
 In the rest of the document, we'll setup a WOL solution for a server host running Ubuntu, and a OpenWrt router in a home network. The Ubunt server will go to sleep when idle, and waken up by the WOL packet send by OpenWrt router when there's a service request from other hosts.
@@ -92,6 +91,7 @@ cp powerautosave.service /etc/systemd/system/powerautosave.service
 systemctl daemon-reload
 systemctl enable powerautosave
 systemctl restart powerautosave
+systemctl status powerautosave
 ```
 
 To reload config:
@@ -143,7 +143,7 @@ uci set wolonconn.@client[-1].iprange='10.1.0.0/16'
 uci commit wolonconn
 ```
 
-add the line to the /etc/rc.local, before exit
+add the line to the /etc/rc.local, before 'exit'
 
 ```bash
 # /etc/rc.local

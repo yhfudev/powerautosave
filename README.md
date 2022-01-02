@@ -30,8 +30,27 @@ setup the hibernate time in config file /etc/systemd/sleep.conf,
 this is the interval between suspend and hibernation.
 ```bash
 # /etc/systemd/sleep.conf
+[Sleep]
 HibernateDelaySec=180min
 ```
+
+test it:
+```
+sudo systemctl suspend-then-hibernate
+```
+
+change Lid Close Action:
+```
+# /etc/systemd/logind.conf
+HandleLidSwitch=suspend-then-hibernate
+```
+restart systemd-logind service
+```
+sudo systemctl restart systemd-logind.service
+```
+
+
+
 
 
 set swap partition in grub config file /etc/default/grub
@@ -60,7 +79,9 @@ It will turn the host to suspend mode when there're
 
 ```bash
 # install packages:
-apt update && apt -y install bash prips ipcalc pcp uuid-runtime
+apt update && apt -y install bash prips ipcalc uuid-runtime
+apt -y install dstat
+apt -y install pcp
 
 # install script
 DN_CONF="/etc/powerautosave"
@@ -75,7 +96,7 @@ touch "${DN_CONF}/pas-ip.list"
 
 # the processes list, the server will enter to sleep if none is running.
 touch "${DN_CONF}/pas-proc.list"
-# echo "wget scp rsync" >> "${DN_CONF}/pas-proc.list"
+echo "wget scp rsync" >> "${DN_CONF}/pas-proc.list"
 
 # setup the waiting time before sleep in config file
 cat >> "${DN_CONF}/powerautosave.conf" <<EOF

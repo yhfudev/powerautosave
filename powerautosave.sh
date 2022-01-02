@@ -420,13 +420,14 @@ start_dstat() {
 }
 
 # turn the host to sleep mode
-# mode: one of suspend
+# mode: suspend, suspend-then-hibernate
 enter_sleep() {
   local PARAM_MODE=$1
   shift
 
   mr_trace "[INFO] enter sleep mode '${PARAM_MODE}' ..."
-  sync && sleep 2 && systemctl ${PARAM_MODE} #DEBUG#
+  # systemctl suspend-then-hibernate
+  sync && sleep 2 && systemctl ${PARAM_MODE} && sleep 1 #DEBUG#
 }
 
 ################################################################################
@@ -499,7 +500,7 @@ do_detect() {
         CNT=0
         PRE_VALUES="0,0,0"
         mr_trace "[INFO] setup wake up time ..."
-        enter_sleep suspend
+        enter_sleep suspend-then-hibernate
         mr_trace "[INFO] wake up from suspend"
         continue
       fi

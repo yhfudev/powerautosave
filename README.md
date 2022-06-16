@@ -14,8 +14,13 @@ In the rest of the document, we'll setup a WOL solution for a server host runnin
 
 The network interface card needs the settings of WOL. The best place to set the card would be the config file for udev, for example:
 ```bash
-# /etc/udev/rules.d/70-persistent-net.rules
-SUBSYSTEM=="net", ATTR{address}=="11:22:33:44:55:66", NAME="net0", RUN+="/sbin/ethtool -s %k wol g"
+if ! which ethtool ; then apt install -y ethtool; fi
+IFNAME=eno1
+MAC=$(ifconfig $IFNAME | grep ether | awk '{print $2}')
+sed -e "s|${IFNAME}:|net0:|" -i /etc/netplan/00-installer-config.yaml
+cat >>/etc/udev/rules.d/70-persistent-net.rules<<EOF
+SUBSYSTEM=="net", ATTR{address}=="${MAC}", NAME="net0", RUN+="`which ethtool` -s %k wol g"
+EOF
 ```
 
 ## Setup suspend+hibernation hybrid mode (Ubuntu)
@@ -29,9 +34,13 @@ It also need avoiding to use SSD as swap partition, to save on writes to the fla
 setup the hibernate time in config file /etc/systemd/sleep.conf,
 this is the interval between suspend and hibernation.
 ```bash
-# /etc/systemd/sleep.conf
+sed -e 's|#HibernateDelaySec=.*$|HibernateDelaySec=180min|' -i /etc/systemd/sleep.conf
+
+# OR
+cat >>/etc/systemd/sleep.conf<<EOF
 [Sleep]
 HibernateDelaySec=180min
+EOF
 ```
 
 test it:
@@ -85,10 +94,10 @@ apt -y install pcp
 
 # install script
 DN_CONF="/etc/powerautosave"
-mkdir "${DN_CONF}"
-cp powerautosave.service powerautosave.sh libshrt.sh "${DN_CONF}"
+sudo mkdir "${DN_CONF}"
+sudo cp powerautosave.service powerautosave.sh libshrt.sh "${DN_CONF}"
 cd "${DN_CONF}"
-chmod 755 *.sh
+sudo chmod 755 *.sh
 
 # the host ip list, the server will enter to sleep if none is ping-able.
 touch "${DN_CONF}/pas-ip.list"
@@ -96,23 +105,25 @@ touch "${DN_CONF}/pas-ip.list"
 
 # the processes list, the server will enter to sleep if none is running.
 touch "${DN_CONF}/pas-proc.list"
-echo "wget scp rsync" >> "${DN_CONF}/pas-proc.list"
+echo "wget scp rsync" | sudo tee "${DN_CONF}/pas-proc.list"
 
 # setup the waiting time before sleep in config file
 cat >> "${DN_CONF}/powerautosave.conf" <<EOF
 # default waiting time before go to sleep
-PAS_IDLE_WAIT_TIME=600 # second
+PAS_IDLE_WAIT_TIME=900 # second
 PAS_CPU_THRESHOLD=88   # percent
 PAS_HD_THRESHOLD=900   # Kbytes
 PAS_NET_THRESHOLD=4000 # bytes
 EOF
 
 # setup service
-cp powerautosave.service /etc/systemd/system/powerautosave.service
-systemctl daemon-reload
-systemctl enable powerautosave
-systemctl restart powerautosave
-systemctl status powerautosave
+sudo cp powerautosave.service /etc/systemd/system/powerautosave.service
+sudo systemctl daemon-reload
+sudo systemctl enable powerautosave
+sudo systemctl restart powerautosave
+sudo systemctl status powerautosave
+
+journalctl -u powerautosave -b
 ```
 
 To reload config:

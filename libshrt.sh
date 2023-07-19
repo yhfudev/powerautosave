@@ -28,7 +28,7 @@ if [ ! -x "${EXEC_BASH}" ]; then
 fi
 
 if [ ! -f "${EXEC_AWK}" ]; then
-  EXEC_AWK=`which gawk`
+  EXEC_AWK=$(which gawk)
 fi
 
 if [ ! -f "${EXEC_AWK}" ]; then

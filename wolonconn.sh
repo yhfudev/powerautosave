@@ -98,7 +98,7 @@ install_software() {
 RTLST_ONEXIT=
 function on_exit_run_routines() {
   #mr_trace "[DEBUG] remove RTLST_ONEXIT=${RTLST_ONEXIT}"
-  echo "${RTLST_ONEXIT}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+  echo "${RTLST_ONEXIT}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read -r a; do
     if [ ! "${a}" = "" ] ; then
       mr_trace "[INFO] run ${a}"
       ${a}
@@ -132,7 +132,7 @@ trap on_sys_exit EXIT
 RTLST_ONUSR1=
 function on_usr1_run_routines() {
   #mr_trace "[DEBUG] remove RTLST_ONUSR1=${RTLST_ONUSR1}"
-  echo "${RTLST_ONUSR1}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+  echo "${RTLST_ONUSR1}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read -r a; do
     if [ ! "${a}" = "" ] ; then
       mr_trace "[INFO] run ${a}"
       ${a}
@@ -158,7 +158,7 @@ trap on_event_usr1 USR1
 FNLST_TEMP=
 function remove_temp_files() {
   #mr_trace "[DEBUG] remove FNLST_TEMP=${FNLST_TEMP}"
-  echo "${FNLST_TEMP}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+  echo "${FNLST_TEMP}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read -r a; do
     if test -f "${a}" ; then
       #mr_trace "[DEBUG] rm -f ${a}"
       rm -f "${a}"
@@ -178,7 +178,7 @@ function add_temp_file() {
 PSLST_BACK=
 function remove_processes() {
   #mr_trace "[DEBUG] remove PSLST_BACK=${PSLST_BACK}"
-  echo "${PSLST_BACK}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read a; do
+  echo "${PSLST_BACK}" | awk -F, '{for (i=1;i<=NF; i++) print $i; }' | while read -r a; do
     if [ ! "${a}" = "" ] ; then
       #mr_trace "[DEBUG] kill ${a}"
       kill -9 "${a}" > /dev/null 2>&1
@@ -212,11 +212,11 @@ find_intf_by_ip() {
   local INTF=''
   local IP=''
   local MASK=''
-  local LIST_INTF=`uci show network | grep '=interface' | awk -F= '{print $1}' | awk -F. '{print $2}'`
+  local LIST_INTF=$(uci show network | grep '=interface' | awk -F= '{print $1}' | awk -F. '{print $2}')
   for INTF in ${LIST_INTF}; do
     #mr_trace "[DEBUG] uci -q get network.${INTF}.ipaddr"
-    IP=`uci -q get network.${INTF}.ipaddr`
-    MASK=`uci -q get network.${INTF}.netmask`
+    IP=$(uci -q get network.${INTF}.ipaddr)
+    MASK=$(uci -q get network.${INTF}.netmask)
     if [ "${IP}" = "" ]; then
       #mr_trace "[WARNING] ignore ${INTF} ipaddr"
       continue
@@ -226,13 +226,13 @@ find_intf_by_ip() {
       continue
     fi
     #mr_trace "[INFO] owipcalc ${IP}/${MASK} contains ${HOST_IP}"
-    local RET=`owipcalc "${IP}/${MASK}" contains ${HOST_IP}`
+    local RET=$(owipcalc "${IP}/${MASK}" contains ${HOST_IP})
     if [ "$RET" = "1" ] ; then
-      local TYPE=`uci -q get network.${INTF}.type`
+      local TYPE=$(uci -q get network.${INTF}.type)
       if [ "${TYPE}" = "bridge" ]; then
         echo "br-${INTF}"
       else
-        local IFNAME=`uci -q get network.${INTF}.ifname`
+        local IFNAME=$(uci -q get network.${INTF}.ifname)
         echo "${IFNAME}"
       fi
       break
@@ -248,19 +248,19 @@ find_mac_by_ip() {
 
   local IP=''
   local MAC=''
-  local NUM_SVR=`uci show dhcp | egrep 'dhcp.@host\[[0-9]+\]=' | sort | uniq | wc -l`
+  local NUM_SVR=$(uci show dhcp | grep -E 'dhcp.@host\[[0-9]+\]=' | sort | uniq | wc -l)
   local CNT=0
-  while [ `echo | awk -v A=${CNT} -v B=${NUM_SVR} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
+  while [ $(echo | awk -v A=${CNT} -v B=${NUM_SVR} '{if (A<B) print 1; else print 0;}') = 1 ]; do
     #mr_trace "[DEBUG] CNT=${CNT}; NUM2=${NUM_SVR}"
     #mr_trace "[DEBUG] uci -q get dhcp.@host[${CNT}].ip"
-    IP=`uci -q get dhcp.@host[${CNT}].ip`
+    IP=$(uci -q get dhcp.@host[${CNT}].ip)
     #mr_trace "[DEBUG] IP=${IP}; HOST_IP=${HOST_IP}"
     if [ "${IP}" = "${HOST_IP}" ]; then
       #mr_trace "[DEBUG] uci -q get dhcp.@host[${CNT}].mac"
-      MAC=`uci -q get dhcp.@host[${CNT}].mac 2>&1`
+      MAC=$(uci -q get dhcp.@host[${CNT}].mac 2>&1)
       if [ $? = 0 ]; then
         #mr_trace "[DEBUG] MAC=$MAC"
-        echo ${MAC}
+        echo "${MAC}"
       fi
       break
     fi
@@ -276,12 +276,12 @@ uci_generate_client_list() {
   local FN_OUT_CLI=$1
   shift
 
-  local NUM_CLI=`uci show wolonconn | egrep 'wolonconn.@client\[[0-9]+\]=' | sort | uniq | wc -l`
+  local NUM_CLI=$(uci show wolonconn | grep -E 'wolonconn.@client\[[0-9]+\]=' | sort | uniq | wc -l)
   #if [[ ${CNT1} < $NUM_SVR ]]; then echo "ok"; else echo "fail"; fi
   local CNT1=0
-  while [ `echo | awk -v A=${CNT1} -v B=${NUM_CLI} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
-    local CONF_REGION=`uci -q get wolonconn.@client[${CNT1}].region`
-    local CONF_IPRANGE=`uci -q get wolonconn.@client[${CNT1}].iprange`
+  while [ $(echo | awk -v A=${CNT1} -v B=${NUM_CLI} '{if (A<B) print 1; else print 0;}') = 1 ]; do
+    local CONF_REGION=$(uci -q get wolonconn.@client[${CNT1}].region)
+    local CONF_IPRANGE=$(uci -q get wolonconn.@client[${CNT1}].iprange)
     #mr_trace "[INFO] client[${CNT1}].iprange=${CONF_IPRANGE}; region=${CONF_REGION}"
     echo "${CONF_IPRANGE},${CONF_REGION}" >> "${FN_OUT_CLI}"
     CNT1=$(( CNT1 + 1 ))
@@ -312,14 +312,14 @@ check_client_send_wol() {
 
   #mr_trace "[INFO] check_client_send_wol ip='${IP_CLI}' intf='${INTF_SVR}' mac='${MAC_SVR}' dest='${DEST_SVR}'"
   local LINE=
-  while read LINE; do
-    local CONF_IPRANGE=`echo $LINE | awk -F, '{print $1}'`
-    local CONF_REGION=`echo $LINE | awk -F, '{print $2}'`
+  while read -r LINE; do
+    local CONF_IPRANGE=$(echo $LINE | awk -F, '{print $1}')
+    local CONF_REGION=$(echo $LINE | awk -F, '{print $2}')
     #mr_trace "[INFO] client.iprange=${CONF_IPRANGE}; region=${CONF_REGION}"
 
     if [ ! "${CONF_IPRANGE}" = "" ]; then
       #mr_trace "[INFO] owipcalc ${CONF_IPRANGE} contains ${IP_CLI} ..."
-      if [ `owipcalc ${CONF_IPRANGE} contains ${IP_CLI}` = 1 ] ; then
+      if [ $(owipcalc ${CONF_IPRANGE} contains ${IP_CLI}) = 1 ] ; then
         #mr_trace "[INFO] etherwake -i ${INTF_SVR} ${MAC_SVR}"
         etherwake -i "${INTF_SVR}" "${MAC_SVR}"
         mr_trace "[INFO] Sent MagicPacket(tm) to ${MAC_SVR} on connection from ${IP_CLI} to ${DEST_SVR}"
@@ -327,7 +327,7 @@ check_client_send_wol() {
     fi
 
     if [ ! "${CONF_REGION}" = "" ]; then
-      string=`curl -s https://freegeoip.app/csv/${IP_CLI}`
+      string=$(curl -s https://freegeoip.app/csv/${IP_CLI})
       IFS=',' read clientip country_code country_name region_code region_name city zip_code time_zone latitude longitude metro_code <<-EOF
 $string
 EOF
@@ -355,17 +355,17 @@ uci_generate_server_list() {
 
   #mr_trace "[DEBUG] uci_generate_server_list tmp='${FN_TMP}'" #DEBUG#
 
-  local NUM_SVR=`uci show wolonconn | egrep 'wolonconn.@server\[[0-9]+\]=' | sort | uniq | wc -l`
+  local NUM_SVR=$(uci show wolonconn | grep -E 'wolonconn.@server\[[0-9]+\]=' | sort | uniq | wc -l)
   #mr_trace "[DEBUG] NUM_SVR=${NUM_SVR}" #DEBUG#
   #if [[ ${CNT} < $NUM_SVR ]]; then echo "ok"; else echo "fail"; fi
   local CNT=0
-  while [ `echo | awk -v A=${CNT} -v B=${NUM_SVR} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
+  while [ $(echo | awk -v A=${CNT} -v B=${NUM_SVR} '{if (A<B) print 1; else print 0;}') = 1 ]; do
     #mr_trace "[DEBUG] CNT=${CNT}" #DEBUG#
-    local CONF_INTF=`uci -q get wolonconn.@server[${CNT}].interface`
-    local CONF_MAC=`uci -q get wolonconn.@server[${CNT}].mac`
+    local CONF_INTF=$(uci -q get wolonconn.@server[${CNT}].interface)
+    local CONF_MAC=$(uci -q get wolonconn.@server[${CNT}].mac)
     local CONF_IP=
-    local CONF_HOST=`uci -q get wolonconn.@server[${CNT}].host`
-    local CONF_PORTS=`uci -q get wolonconn.@server[${CNT}].ports`
+    local CONF_HOST=$(uci -q get wolonconn.@server[${CNT}].host)
+    local CONF_PORTS=$(uci -q get wolonconn.@server[${CNT}].ports)
     CNT=$(( CNT + 1 ))
 
     if [ "${CONF_HOST}" = "" ]; then
@@ -377,7 +377,7 @@ uci_generate_server_list() {
     if [ "$?" = "0" ]; then
       CONF_IP="${CONF_HOST}"
     else
-      CONF_IP=`nslookup "${CONF_HOST}" | grep "Address 1" | awk -F: '{print $2}'`
+      CONF_IP=$(nslookup "${CONF_HOST}" | grep "Address 1" | awk -F: '{print $2}')
     fi
     if [ "${CONF_IP}" = "" ]; then
       mr_trace "[WARNING] not available of server ip: host='${CONF_HOST}'; mac=${CONF_MAC}; ports=${CONF_PORTS};"
@@ -389,11 +389,11 @@ uci_generate_server_list() {
     fi
     if [ "${CONF_MAC}" = "" ]; then
       # find the mac
-      CONF_MAC=`find_mac_by_ip ${CONF_IP}`
+      CONF_MAC=$(find_mac_by_ip ${CONF_IP})
     fi
     if [ "${CONF_INTF}" = "" ]; then
       # find the interface
-      CONF_INTF=`find_intf_by_ip ${CONF_IP}`
+      CONF_INTF=$(find_intf_by_ip ${CONF_IP})
     fi
 
     if [ "${CONF_MAC}" = "" ]; then
@@ -427,14 +427,14 @@ check_conn_send_wol() {
 
   local LINE=
   while read LINE; do
-    local CONF_INTF=`echo $LINE | awk -F, '{print $1}'`
-    local CONF_MAC=`echo $LINE | awk -F, '{print $2}'`
-    local CONF_IP=`echo $LINE | awk -F, '{print $3}'`
-    local PORT=`echo $LINE | awk -F, '{print $4}'`
+    local CONF_INTF=$(echo $LINE | awk -F, '{print $1}')
+    local CONF_MAC=$(echo $LINE | awk -F, '{print $2}')
+    local CONF_IP=$(echo $LINE | awk -F, '{print $3}')
+    local PORT=$(echo $LINE | awk -F, '{print $4}')
     #mr_trace "[INFO] server.interface=${CONF_INTF}; mac=${CONF_MAC}; ip=${CONF_IP}; port=${PORT}"
 
     #mr_trace "[INFO] conntrack -L -p tcp --reply-src ${CONF_IP} --reply-port-src ${PORT} --state SYN_SENT"
-    conntrack -L -p tcp --reply-src ${CONF_IP} --reply-port-src ${PORT} --state SYN_SENT 2>/dev/null > "${FN_TMP}"
+    conntrack -L -p tcp --reply-src "${CONF_IP}" --reply-port-src "${PORT}" --state SYN_SENT 2>/dev/null > "${FN_TMP}"
     while read CLIENT_IP ; do
       local CLIENT_IP=${CLIENT_IP##*SYN_SENT src=}
       local CLIENT_IP=${CLIENT_IP%% *}
@@ -481,7 +481,7 @@ main() {
   local RUN_STATE=1
   while [ ! $RUN_STATE = 0 ]; do
     mr_trace "load config ..."
-    FN_TMP=`uci -q get wolonconn.basic.filetemp`
+    FN_TMP=$(uci -q get wolonconn.basic.filetemp)
     if [ $? = 0 ]; then
       #mr_trace "[INFO] got wolonconn.basic.filetemp=${FN_TMP}"
       echo
@@ -548,14 +548,21 @@ assert ()                 #  If condition false,
 
 test_find_intf_by_ip() {
   mr_trace "[INFO] test find_intf_by_ip"
-  local INTF=`find_intf_by_ip 10.1.1.24`
-  assert $LINENO "'$INTF' = 'br-office'"
+  local ZONE="office"
+  # TODO: remove ZONE
+  # TODO: add ZONE
+  local IP1=$(uci get network.${ZONE}.ipaddr)
+  local INTF=$(find_intf_by_ip $IP1)
+  assert $LINENO "'$INTF' = 'br-${ZONE}'"
 }
 
 test_find_mac_by_ip() {
   mr_trace "[INFO] test find_mac_by_ip"
-  local MAC=`find_mac_by_ip 10.1.1.24`
-  assert $LINENO "'$MAC' = '00:25:31:01:C2:0A'"
+  # TODO: add host
+  local IP1=$(uci get dhcp.@host[-1].ip)
+  local MAC1=$(uci get dhcp.@host[-1].mac)
+  local MAC=$(find_mac_by_ip $IP1)
+  assert $LINENO "'$MAC' = '$MAC1'"
 }
 
 test_uci_generate_client_list() {
@@ -566,7 +573,7 @@ test_uci_generate_client_list() {
   uci_generate_client_list "${FN_TMP}"
   echo "client list file:"; cat "${FN_TMP}"
 
-  local CNT=`cat "${FN_TMP}" | wc -l`
+  local CNT=$(cat "${FN_TMP}" | wc -l)
   assert $LINENO "'$CNT' = '1'"
 
   rm -f "${FN_TMP}"
@@ -581,13 +588,13 @@ test_uci_generate_server_list() {
   echo "server list file:"; cat "${FN_TMP}"
 
   local CNT=
-  CNT=`cat "${FN_TMP}" | wc -l`
+  CNT=$(cat "${FN_TMP}" | wc -l)
   assert $LINENO "'$CNT' = '5'"
 
-  CNT=`cat "${FN_TMP}" | grep br-netlab | wc -l`
+  CNT=$(cat "${FN_TMP}" | grep br-netlab | wc -l)
   assert $LINENO "'$CNT' = '3'"
 
-  CNT=`cat "${FN_TMP}" | grep br-office | wc -l`
+  CNT=$(cat "${FN_TMP}" | grep br-office | wc -l)
   assert $LINENO "'$CNT' = '2'"
 
   rm -f "${FN_TMP}"
@@ -680,14 +687,14 @@ remove_uci_section() {
 
   # remove host config
   local CNT=1
-  while [ `echo | awk -v A=0 -v B=${CNT} '{if (A<B) print 1; else print 0;}'` = 1 ]; do
+  while [ $(echo | awk -v A=0 -v B=${CNT} '{if (A<B) print 1; else print 0;}') = 1 ]; do
 
-    uci show ${PARAM_SECTION} |  awk -F. '{print $2}' | grep = | awk -F= '{print $1}' \
+    uci show ${PARAM_SECTION} |  awk -F. '{print $2}' | grep "=" | awk -F= '{print $1}' \
       | grep "${PARAM_FILTER}" | sort -r | uniq \
       | while read a; do uci -q delete ${PARAM_SECTION}.$a; done
 
-    CNT=`uci show ${PARAM_SECTION} |  awk -F. '{print $2}' | grep = | awk -F= '{print $1}' \
-      | grep "${PARAM_FILTER}" | sort -r | uniq | wc -l `
+    CNT=$(uci show ${PARAM_SECTION} |  awk -F. '{print $2}' | grep "=" | awk -F= '{print $1}' \
+      | grep "${PARAM_FILTER}" | sort -r | uniq | wc -l )
 
   done
 }

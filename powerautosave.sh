@@ -27,9 +27,9 @@ my_getpath() {
         DN=$(dirname "${DN}")
     fi
     local DNORIG=$(pwd)
-    cd "${DN}" > /dev/null 2>&1
+    cd "${DN}" > /dev/null 2>&1 || return
     DN=$(pwd)
-    cd "${DNORIG}"
+    cd "${DNORIG}" > /dev/null 2>&1 || return
     if [ "${FN}" = "" ]; then
         echo "${DN}"
     else
@@ -246,7 +246,7 @@ detect_processes() {
     if [ "$PROC" = "" ]; then
       continue
     fi
-    if [ ! "`pgrep $PROC`" = "" ]; then
+    if [ ! "$(pgrep $PROC)" = "" ]; then
       RET=1
       break
     fi
@@ -275,10 +275,10 @@ function worker_ping_ip() {
     sleep $( echo | awk -v A=$RANDOM '{printf("%4.3f\n", (A%20+1)*0.3);}' )
     # push to the list
     #mr_trace "[DEBUG] add to list: ${PARAM_IP} ..."
-    echo "${PARAM_IP}" >> ${PARAM_FN_LIST}
+    echo "${PARAM_IP}" >> "${PARAM_FN_LIST}"
   fi
 
-  mp_notify_child_exit ${PARAM_SESSION_ID}
+  mp_notify_child_exit "${PARAM_SESSION_ID}"
 }
 
 ## @fn ping_ip_list_from_file()
@@ -320,17 +320,19 @@ ping_ip_range() {
 
   # ipcalc -b 192.168.0.1/24
   # prips 192.168.0.1 192.168.1.3
+  local IP1
+  local IP2
   if [ "${PARAM_IP2}" = "" ]; then
     # only ip/prefix
-    IP1=$( ipcalc -b ${PARAM_IP1} | grep "HostMin:" | awk '{print $2}' )
-    IP2=$( ipcalc -b ${PARAM_IP1} | grep "HostMax:" | awk '{print $2}' )
+    IP1=$( ipcalc -b "${PARAM_IP1}" | grep "HostMin:" | awk '{print $2}' )
+    IP2=$( ipcalc -b "${PARAM_IP1}" | grep "HostMax:" | awk '{print $2}' )
   else
     # IP range
-    IP1=$( ipcalc -b ${PARAM_IP1} | grep "Address:" | awk '{print $2}' )
-    IP2=$( ipcalc -b ${PARAM_IP2} | grep "Address:" | awk '{print $2}' )
+    IP1=$( ipcalc -b "${PARAM_IP1}" | grep "Address:" | awk '{print $2}' )
+    IP2=$( ipcalc -b "${PARAM_IP2}" | grep "Address:" | awk '{print $2}' )
   fi
   local FN_LIST="/tmp/tmp-list-iprange-$(uuidgen)"
-  prips $IP1 $IP2 > "${FN_LIST}"
+  prips "$IP1" "$IP2" > "${FN_LIST}"
   ping_ip_list_from_file "${FN_LIST}" "${PARAM_FN_OUT}"
   #cat "${PARAM_FN_OUT}"
   rm -f "${FN_LIST}" # add_temp_file "${FN_LIST}"
@@ -353,7 +355,7 @@ ping_list() {
   ping_ip_list_from_file "${FN_LIST_ACTIVE_IP}" "${FN_TMPOUT}"
   mv "${FN_TMPOUT}" "${FN_LIST_ACTIVE_IP}"
 
-  if [ `cat "${FN_LIST_ACTIVE_IP}" | wc -l` -gt 0 ]; then
+  if [ $(cat "${FN_LIST_ACTIVE_IP}" | wc -l) -gt 0 ]; then
     echo "1"
     return
   fi
@@ -364,7 +366,7 @@ ping_list() {
   while read IP1 IP2; do
     ping_ip_range "${FN_LIST_ACTIVE_IP}" "$IP1" "$IP2"
   done < "${PARAM_FN_IN}"
-  if [ `cat "${FN_LIST_ACTIVE_IP}" | wc -l` -gt 0 ]; then
+  if [ $(cat "${FN_LIST_ACTIVE_IP}" | wc -l) -gt 0 ]; then
     echo "1"
     return
   fi
@@ -480,7 +482,7 @@ do_detect() {
   local RET=0
   local CNT=0
   local CNTRD=0
-  local PRE_TIME=`date +%s`
+  local PRE_TIME=$(date +%s)
   # cpu,disk,net
   local PRE_VALUES="0,0,0"
   local RUN_STATE=0
@@ -493,10 +495,10 @@ do_detect() {
 
     if [ "$CNT" = "0" ]; then
       # reset the timer
-      PRE_TIME=`date +%s`
+      PRE_TIME=$(date +%s)
     else
-      CUR_TIME=`date +%s`
-      if [ `echo | awk -v p=$PRE_TIME -v off=$PARAM_EXPTIMES -v c=$CUR_TIME '{if (p<c-off) print 1; else print 0;}'` = 1 ]; then
+      CUR_TIME=$(date +%s)
+      if [ $(echo | awk -v p=$PRE_TIME -v off=$PARAM_EXPTIMES -v c=$CUR_TIME '{if (p<c-off) print 1; else print 0;}') = 1 ]; then
         CNT=0
         PRE_VALUES="0,0,0"
         mr_trace "[INFO] setup wake up time ..."
@@ -518,7 +520,7 @@ do_detect() {
 
     if test -f "${PARAM_FN_IP_PAIR}"; then
       #mr_trace "[DEBUG] check if host exists ..."
-      RET=`ping_list "${PARAM_FN_IP_PAIR}"`
+      RET=$(ping_list "${PARAM_FN_IP_PAIR}")
       # ... reset to CNT=0 if exist IP
       if [ "$RET" = "1" ]; then
         CNT=0
@@ -527,8 +529,8 @@ do_detect() {
 
     if test -f "${PARAM_FN_PROC}"; then
       #mr_trace "[DEBUG] check if exist background processes ..."
-      local ALLPS=`cat "${PARAM_FN_PROC}"`
-      RET=`detect_processes ${ALLPS}`
+      local ALLPS=$(cat "${PARAM_FN_PROC}")
+      RET=$(detect_processes ${ALLPS})
       # ... reset to CNT=0 if exist processes
       if [ "$RET" = "1" ]; then
         CNT=0
@@ -554,10 +556,10 @@ do_detect() {
       # calculat the average values
       #mr_trace "[DEBUG] new cpu,hd,net=`echo ${LINE} | awk -F, '{print $3 "," $6 "+" $7 "(" ($6+$7) ")," $8 "+" $9 "(" ($8+$9) ")";}'`" #DEBUG#
       #mr_trace "[DEBUG] before update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
-      PRE_VALUES=`echo ${LINE} | awk -F, -v A=0.8 -v PRE="${PRE_VALUES}" '{split(PRE,a,","); p_cpu=a[1]; p_hd=a[2]; p_net=a[3]; v=$3; if (v>100) v=100; p_cpu = A*p_cpu + (1.0-A)*v; p_hd = A*p_hd + (1.0-A)*($6+$7); p_net = A*p_net + (1.0-A)*($8+$9); print p_cpu "," p_hd "," p_net;}'`
+      PRE_VALUES=$(echo ${LINE} | awk -F, -v A=0.8 -v PRE="${PRE_VALUES}" '{split(PRE,a,","); p_cpu=a[1]; p_hd=a[2]; p_net=a[3]; v=$3; if (v>100) v=100; p_cpu = A*p_cpu + (1.0-A)*v; p_hd = A*p_hd + (1.0-A)*($6+$7); p_net = A*p_net + (1.0-A)*($8+$9); print p_cpu "," p_hd "," p_net;}')
       #mr_trace "[DEBUG] after update: PRE_VALUES=${PRE_VALUES}" #DEBUG#
       # check the values
-      RET=`echo ${PRE_VALUES} | awk -F, '{out=0; if ($1 > 100) out=1; if ($2 > 200000) out=2; if ($3 > 5000000) out=3; print out;}'`
+      RET=$(echo ${PRE_VALUES} | awk -F, '{out=0; if ($1 > 100) out=1; if ($2 > 200000) out=2; if ($3 > 5000000) out=3; print out;}')
       if [ ! "$RET" = "0" ]; then
         mr_trace "[WARNING] detected abnormal values at [${RET}]; avg cpu,hd,net=${PRE_VALUES}; line=${LINE};" #DEBUG#
       fi
@@ -566,11 +568,11 @@ do_detect() {
       # disk r/w < 100k
       # net recv/send < 1k
       #mr_trace "[DEBUG] threshod cpu,hd,net=${PAS_CPU_THRESHOLD},${PAS_HD_THRESHOLD},${PAS_NET_THRESHOLD}" #DEBUG#
-      RET=`echo ${PRE_VALUES} | awk -F, \
+      RET=$(echo ${PRE_VALUES} | awk -F, \
         -v CPU=${PAS_CPU_THRESHOLD} \
         -v HD=${PAS_HD_THRESHOLD} \
         -v NET=${PAS_NET_THRESHOLD} \
-        '{out=0; if ($1 < CPU) out=1; if ($2 > HD) out=2; if ($3 > NET) out=3; print out;}'`
+        '{out=0; if ($1 < CPU) out=1; if ($2 > HD) out=2; if ($3 > NET) out=3; print out;}')
       if [ ! "$RET" = "0" ]; then
         #mr_trace "[INFO] avg cpu,hd,net=${PRE_VALUES}; ret=$RET; reset CNT=0" #DEBUG#
         CNT=0
@@ -730,10 +732,10 @@ test_onexit_processes() {
 test_detect_processes() {
   local RET1=0
 
-  RET1=`detect_processes bash`
+  RET1=$(detect_processes bash)
   assert $LINENO "'${RET1}' = '1'"
 
-  RET1=`detect_processes 'abc'`
+  RET1=$(detect_processes 'abc')
   assert $LINENO "'${RET1}' = '0'"
 }
 
@@ -742,10 +744,10 @@ test_detect_ip() {
   rm -f "${FN_LIST}"
   touch "${FN_LIST}"
   # use local host external IP
-  local LIST_IF=`ip link show | egrep "^[0-9]+" | awk -F: '{print $2}' | grep -v "br-" | grep -v " lo" | grep -v " virbr" | grep -v "docker" | grep -v "veth"`
+  local LIST_IF=$(ip link show | egrep "^[0-9]+" | awk -F: '{print $2}' | grep -v "br-" | grep -v " lo" | grep -v " virbr" | grep -v "docker" | grep -v "veth")
   local IF=
   for IF in ${LIST_IF}; do
-    IP=`ip a s dev $IF | grep "inet " | awk '{print $2}'`
+    IP=$(ip a s dev $IF | grep "inet " | awk '{print $2}')
     if [ ! "$IP" = "" ]; then
       ping_ip_range "${FN_LIST}" "$IP"
     fi

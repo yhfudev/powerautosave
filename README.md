@@ -1,18 +1,27 @@
 # Poor man's home PC server power saver
 
+## Table of Contents
+<!-- TOC depthFrom:2 -->
+- [Poor man's home PC server power saver](#poor-mans-home-pc-server-power-saver)
+  - [Table of Contents](#table-of-contents)
+  - [What it is](#what-it-is)
+  - [Setup WOL on Linux server (Ubuntu)](#setup-wol-on-linux-server-ubuntu)
+  - [Setup suspend+hibernation hybrid mode (Ubuntu)](#setup-suspendhibernation-hybrid-mode-ubuntu)
+  - [Install powerautosave.sh on Linux server (Ubuntu)](#install-powerautosavesh-on-linux-server-ubuntu)
+  - [Install wolonconn.sh on Linux router (OpenWrt)](#install-wolonconnsh-on-linux-router-openwrt)
+<!-- /TOC -->
+
 ## What it is
 
-This project include the documents and scripts to setup servers in home network to sleep when it's idle, and wake up when request arrives automatically without human involved. It can be used for NAS/media/backup server which required 24/7 up time. As a example, one of the author's PC server draw about 100W power on active, and it drop to 8W when in idle state.
+This project includes the documents and scripts to set up servers in a home network to sleep when they're idle, and wake up automatically when a request arrives without human involvement. It can be used for a NAS/media/backup server that requires 24/7 uptime. As an example, one of the author's PC servers draws about 100W of power when active and drops to 8W when in an idle state.
 
-The basic ideal is to put a sever to suspend state when host idle is detected; and the router, which is installed with a WOL script, will send out a WOL packet once it detect another host initiates an access request to the suspended server. The server will then power on when received the WOL packet.
+The basic idea is to put a server into a suspend state when idle is detected on the host; the router, which is installed with a WOL script, will send out a WOL (Wake-on-LAN) packet once it detects another host initiating an access request to the suspended server. The server will then power on when it receives the WOL packet.
 
-
-In the rest of the document, we'll setup a WOL solution for a server host running Linux (Ubuntu), and a OpenWrt router in a home network. The Linux server (Ubuntu) will go to sleep when idle, and waken up by the WOL packet send by OpenWrt router when there's a service request from other hosts.
-
+In the rest of the document, we'll set up a WOL solution for a server host running Linux (Ubuntu), and an OpenWrt router in a home network. The Linux server (Ubuntu) will go to sleep when idle and be wakened up by the WOL packet sent by the OpenWrt router when there's a service request from other hosts.
 
 ## Setup WOL on Linux server (Ubuntu)
 
-The network interface card needs the settings of WOL. The best place to set the card would be the config file for udev, for example:
+The network interface card requires the settings for Wake-on-LAN (WOL). The best place to configure the card would be the config file for `udev`, for example:
 ```bash
 if ! which ethtool ; then apt install -y ethtool; fi
 IFNAME=eno1
@@ -24,15 +33,13 @@ EOF
 ```
 
 ## Setup suspend+hibernation hybrid mode (Ubuntu)
+This step involves setting the host to a suspend state and hibernating the host if it remains inactive for a pre-defined interval, to avoid potential data loss due to power outages.
 
-This step is to set the host to suspend state, and hibernate the host if it's not activated after pre-defined interval, to avoid possible power outage lose.
+To enable hibernation, a swap partition on the HDD will be utilized, and the data in RAM will be dumped to the swap partition. Therefore, the size of the swap partition should be larger than the size of the RAM memory.
 
-It will use a swap partition in HDD, the data in RAM will be dumpped to the swap partition, so the size of the partition should larger than the size of RAM memory.
+It is also essential to avoid using an SSD as the swap partition to minimize the number of writes to the flash drive and prolong its lifespan.
 
-It also need avoiding to use SSD as swap partition, to save on writes to the flash drive.
-
-setup the hibernate time in config file /etc/systemd/sleep.conf,
-this is the interval between suspend and hibernation.
+To configure the hibernate time, modify the configuration file located at /etc/systemd/sleep.conf. This file allows you to set the interval between the suspend state and hibernation.
 ```bash
 sed -e 's|#HibernateDelaySec=.*$|HibernateDelaySec=180min|' -i /etc/systemd/sleep.conf
 
@@ -48,21 +55,18 @@ test it:
 sudo systemctl suspend-then-hibernate
 ```
 
-change Lid Close Action:
+Change the Lid Close Action with the following command:
 ```
 # /etc/systemd/logind.conf
 HandleLidSwitch=suspend-then-hibernate
 ```
-restart systemd-logind service
+Restart the systemd-logind service:
 ```
 sudo systemctl restart systemd-logind.service
 ```
 
 
-
-
-
-set swap partition in grub config file /etc/default/grub
+Set the swap partition in the GRUB config file /etc/default/grub:
 ```bash
 blkid /dev/sdaX
 
@@ -77,14 +81,13 @@ sudo update-grub
 
 ## Install powerautosave.sh on Linux server (Ubuntu)
 
-powerautosave.sh is a script to turn server to sleep mode when the server is idle.
-It will turn the host to suspend mode when there're
-* nobody login to the system
-* CPU is idle, PAS_CPU_THRESHOLD
-* HDD has low IO, PAS_HD_THRESHOLD
-* network has low traffic, PAS_NET_THRESHOLD
-* system is idle for a long time, PAS_IDLE_WAIT_TIME
+powerautosave.sh is a script designed to put the server into sleep mode when the server is idle. The script will suspend the host when the specified conditions are met:
 
+- there is nobody logged into the system.
+- the CPU is idle, based on the PAS_CPU_THRESHOLD.
+- the HDD has low IO, based on the PAS_HD_THRESHOLD.
+- the network has low traffic, based on the PAS_NET_THRESHOLD.
+- the system has been idle for a long time, defined by the PAS_IDLE_WAIT_TIME.
 
 ```bash
 # install packages:
@@ -105,7 +108,7 @@ touch "${DN_CONF}/pas-ip.list"
 
 # the processes list, the server will enter to sleep if none is running.
 touch "${DN_CONF}/pas-proc.list"
-echo "wget scp rsync" | sudo tee "${DN_CONF}/pas-proc.list"
+echo "wget scp rsync dstat" | sudo tee "${DN_CONF}/pas-proc.list"
 
 # setup the waiting time before sleep in config file
 cat >> "${DN_CONF}/powerautosave.conf" <<EOF
@@ -134,18 +137,16 @@ kill -s SIGUSR1 $(ps -ef | grep owerautosave | grep -v grep | awk '{print $2}')
 
 ## Install wolonconn.sh on Linux router (OpenWrt)
 
-wolonconn.sh is a script to send WOL packets to active the server once a connection detected on router.
+The script "wolonconn.sh" serves the purpose of sending Wake-on-LAN (WOL) packets to activate the server once a connection is detected on the OpenWrt router.
 
-Be sure that the request packet from the client to the server host will pass through the OpenWrt router. The server can be either behind the router if the packet from outsides(Internet), or in a separate virtual LAN if the packet is from the client also behind the router.
+To ensure proper functionality, it is important to verify that the request packet from the client to the server host passes through the OpenWrt router. The server can either be located behind the router if the packet originates from the outside (Internet), or in a separate virtual LAN if the packet is from a client also behind the router.
 
-And the server host should also be listed in the "DHCP and DNS -- Static Leases" table, includes its host name, IP and MAC address.
-So that the program can query the MAC address and interface for the server host.
+Additionally, the server host should be listed in the "DHCP and DNS -- Static Leases" table, which includes its host name, IP address, and MAC address. This listing allows the program to query the MAC address and interface required for the server host, ensuring that the WOL packets are sent to the correct destination and the server is properly activated upon connection detection.
 
 
 ```bash
 # install packages:
-opkg update
-opkg install bash curl conntrack owipcalc etherwake uuidgen
+opkg update; opkg install bash curl conntrack owipcalc etherwake uuidgen
 
 # install script
 cp wolonconn.sh /etc/wolonconn.sh
@@ -173,9 +174,11 @@ uci set wolonconn.@client[-1].iprange='10.1.0.0/16'
 
 # uci revert wolonconn
 uci commit wolonconn
+
+uci show wolonconn
 ```
 
-add the line to the /etc/rc.local, before 'exit'
+add the line to the file `/etc/rc.local`, before 'exit'
 
 ```bash
 # /etc/rc.local

@@ -233,6 +233,9 @@ find_intf_by_ip() {
         echo "br-${INTF}"
       else
         local IFNAME=$(uci -q get network.${INTF}.ifname)
+        if [ "${IFNAME}" = "" ]; then
+          IFNAME=$(uci -q get network.${INTF}.device)
+        fi
         echo "${IFNAME}"
       fi
       break
@@ -378,6 +381,9 @@ uci_generate_server_list() {
       CONF_IP="${CONF_HOST}"
     else
       CONF_IP=$(nslookup "${CONF_HOST}" | grep "Address 1" | awk -F: '{print $2}')
+    fi
+    if [ "${CONF_IP}" = "" ]; then
+      CONF_IP=$(nslookup "${CONF_HOST}" | grep -A 1 Name: | grep Address: | awk '{print $2}')
     fi
     if [ "${CONF_IP}" = "" ]; then
       mr_trace "[WARNING] not available of server ip: host='${CONF_HOST}'; mac=${CONF_MAC}; ports=${CONF_PORTS};"

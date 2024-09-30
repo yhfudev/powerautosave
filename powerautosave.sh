@@ -43,9 +43,12 @@ if [ ! "${DN_EXEC}" = "" ]; then
 else
     DN_EXEC="${DN_EXEC}/"
 fi
-DN_TOP="$(my_getpath "${DN_EXEC}/../")"
-DN_BIN="$(my_getpath "${DN_TOP}/bin/")"
-DN_EXEC="$(my_getpath ".")"
+# DN_TOP="$(my_getpath "${DN_EXEC}/../")"
+# DN_BIN="$(my_getpath "${DN_TOP}/bin/")"
+# DN_EXEC="$(my_getpath ".")"
+
+# the wait seconds for one checking item, CPU, login, etc.
+WAIT_CHECK=5
 
 ################################################################################
 if [ "${FN_LOG}" = "" ]; then
@@ -57,6 +60,25 @@ if [ "${FN_LOG}" = "" ]; then
     FN_LOG="/dev/stderr"
 fi
 
+# detect which logger is installed:
+IS_RSYSLOG=1
+if systemctl is-active --quiet rsyslog; then
+  echo "rsyslog is installed and running."
+elif command -v rsyslogd >/dev/null 2>&1; then
+  echo "rsyslog is installed but not running."
+  IS_RSYSLOG=0
+else
+  echo "rsyslog is not installed."
+  IS_RSYSLOG=0
+fi
+# Check for journalctl
+if command -v journalctl >/dev/null 2>&1; then
+  echo "journalctl is available."
+  IS_RSYSLOG=0
+else
+  echo "journalctl is not available."
+fi
+
 ## @fn mr_trace()
 ## @brief print a trace message
 ## @param msg the message
@@ -65,6 +87,8 @@ fi
 mr_trace() {
   if [ "${UNIT_TEST}" = "1" ]; then
     echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] $@" | tee -a ${FN_LOG} 1>&2
+  elif [ "$IS_RSYSLOG" = "0" ]; then
+    echo "$@" | systemd-cat -t powerautosave -p info
   else
     logger -t powerautosave "$@" #DEBUG#
   fi
@@ -73,16 +97,19 @@ mr_trace() {
 fatal_error() {
   if [ "${UNIT_TEST}" = "1" ]; then
     echo "$(date +"%Y-%m-%d %H:%M:%S.%N" | cut -c1-23) [self=${BASHPID},$(basename "$0")] FATAL: $@" | tee -a ${FN_LOG} 1>&2
+  elif [ "$IS_RSYSLOG" = "0" ]; then
+    echo "$@" | systemd-cat -t powerautosave -p err
   else
     logger -t powerautosave "[FATAL] $@"
   fi
   exit 1
 }
 
-#####################################################################
-if [ -f "${DN_EXEC}/libshrt.sh" ]; then
-. ${DN_EXEC}/libshrt.sh
+################################################################################
+if [ ! -f "${DN_EXEC}/libshrt.sh" ]; then
+  fatal_error "Not found lib file: libshrt.sh"
 fi
+. ${DN_EXEC}/libshrt.sh
 HDFF_NUM_CLONE=16
 
 # generate session for this process and its children
@@ -122,7 +149,7 @@ fi
 
 install_software() {
   apt update
-  apt -y install bash prips ipcalc
+  apt -y install bash gawk prips ipcalc
   #apt -y install sysstat # for mpstat
   apt -y install pcp # for dstat
   apt -y install uuid-runtime # for uuidgen
@@ -511,18 +538,18 @@ do_detect() {
 
     RET=$(w -h | grep "pts/" | wc -l)
     if (( $RET > 0 )); then
-      #mr_trace "[DEBUG] somebody login, continue"
+      # mr_trace "[DEBUG] somebody login, reset CNT, continue"
       CNT=0
-      sleep 2
+      sleep ${WAIT_CHECK}
       continue
     fi
-
 
     if test -f "${PARAM_FN_IP_PAIR}"; then
       #mr_trace "[DEBUG] check if host exists ..."
       RET=$(ping_list "${PARAM_FN_IP_PAIR}")
       # ... reset to CNT=0 if exist IP
       if [ "$RET" = "1" ]; then
+        # mr_trace "[DEBUG] host exists, reset CNT, continue"
         CNT=0
       fi
     fi
@@ -533,18 +560,19 @@ do_detect() {
       RET=$(detect_processes ${ALLPS})
       # ... reset to CNT=0 if exist processes
       if [ "$RET" = "1" ]; then
+        mr_trace "[DEBUG] exist background processes, reset CNT, continue"
         CNT=0
       fi
     fi
 
     if [ "$CNT" = "0" ]; then
-      mr_trace "[DEBUG] previous check reset CNT, continue"
+      #mr_trace "[DEBUG] previous check reset CNT, continue"
       rm -f "${FN_CSV_DSTAT}"
       continue
     fi
 
     if [ ! -f "${FN_CSV_DSTAT}" ]; then
-      sleep 2
+      sleep ${WAIT_CHECK}
       continue
     fi
 
@@ -586,7 +614,7 @@ do_detect() {
     done < "${FN_CSV_TMP}"
     rm -f "${FN_CSV_TMP}"
 
-    sleep 2
+    sleep ${WAIT_CHECK}
   done
   mr_trace "[DEBUG] end of do_detect"
 }
@@ -604,7 +632,7 @@ main() {
     # default waiting time before go to sleep
     PAS_IDLE_WAIT_TIME=600 # second
     PAS_CPU_THRESHOLD=88   # percent
-    PAS_HD_THRESHOLD=900   # Kbytes
+    PAS_HD_THRESHOLD=900   # KiB
     PAS_NET_THRESHOLD=4000 # bytes
 
     mr_trace "[INFO] loading config ..."
@@ -619,6 +647,11 @@ main() {
     fi
     local FN_IP="${DN_CONF}/pas-ip.list"
     local FN_PROC="${DN_CONF}/pas-proc.list"
+
+    mr_trace "[INFO] PAS_IDLE_WAIT_TIME=${PAS_IDLE_WAIT_TIME} second"
+    mr_trace "[INFO] PAS_CPU_THRESHOLD=${PAS_CPU_THRESHOLD} %"
+    mr_trace "[INFO] PAS_HD_THRESHOLD=${PAS_HD_THRESHOLD} KiB"
+    mr_trace "[INFO] PAS_NET_THRESHOLD=${PAS_NET_THRESHOLD} bytes"
 
     set_run_state 1
     do_detect ${PAS_IDLE_WAIT_TIME} "${FN_IP}" "${FN_PROC}"

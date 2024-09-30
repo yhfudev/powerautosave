@@ -7,6 +7,14 @@
   - [What it is](#what-it-is)
   - [Setup WOL on Linux server (Ubuntu)](#setup-wol-on-linux-server-ubuntu)
   - [Setup suspend+hibernation hybrid mode (Ubuntu)](#setup-suspendhibernation-hybrid-mode-ubuntu)
+    - [use swap only for suspend](#use-swap-only-for-suspend)
+    - [Change the Lid Close Action](#change-the-lid-close-action)
+    - [hibernate](#hibernate)
+    - [setup a swap file](#setup-a-swap-file)
+    - [setup a swap partition](#setup-a-swap-partition)
+    - [setup the boot](#setup-the-boot)
+    - [update boot](#update-boot)
+    - [testing](#testing)
   - [Install powerautosave.sh on Linux server (Ubuntu)](#install-powerautosavesh-on-linux-server-ubuntu)
   - [Install wolonconn.sh on Linux router (OpenWrt)](#install-wolonconnsh-on-linux-router-openwrt)
 <!-- /TOC -->
@@ -25,23 +33,59 @@ The network interface card requires the settings for Wake-on-LAN (WOL). The best
 ```bash
 if ! which ethtool ; then apt install -y ethtool; fi
 IFNAME=eno1
-MAC=$(ifconfig $IFNAME | grep ether | awk '{print $2}')
-sed -e "s|${IFNAME}:|net0:|" -i /etc/netplan/00-installer-config.yaml
-cat >>/etc/udev/rules.d/70-persistent-net.rules<<EOF
+MAC=$(ip address show dev $IFNAME | grep ether | awk '{print $2}')
+sudo sed -e "s|${IFNAME}:|net0:|" -i /etc/netplan/00-installer-config.yaml
+(cat >/dev/stdout<<EOF
 SUBSYSTEM=="net", ATTR{address}=="${MAC}", NAME="net0", RUN+="`which ethtool` -s %k wol g"
 EOF
+) | sudo tee /etc/udev/rules.d/70-persistent-net.rules
 ```
 
 ## Setup suspend+hibernation hybrid mode (Ubuntu)
+
 This step involves setting the host to a suspend state and hibernating the host if it remains inactive for a pre-defined interval, to avoid potential data loss due to power outages.
 
-To enable hibernation, a swap partition on the HDD will be utilized, and the data in RAM will be dumped to the swap partition. Therefore, the size of the swap partition should be larger than the size of the RAM memory.
+To enable hibernation, a swap partition on the HDD or a swap file will be utilized. The swap file size recommend to be at least the half the size of RAM.
 
 It is also essential to avoid using an SSD as the swap partition to minimize the number of writes to the flash drive and prolong its lifespan.
 
-To configure the hibernate time, modify the configuration file located at /etc/systemd/sleep.conf. This file allows you to set the interval between the suspend state and hibernation.
+### use swap only for suspend
+
+to prevent the kernel from utilizing it for swapping:
 ```bash
-sed -e 's|#HibernateDelaySec=.*$|HibernateDelaySec=180min|' -i /etc/systemd/sleep.conf
+sudo sysctl vm.swappiness
+sudo sysctl -w vm.swappiness=1
+```
+
+setup config:
+```bash
+echo "vm.swappiness=1" | tee -a /etc/sysctl.d/local.conf
+```
+
+### Change the Lid Close Action
+
+Change the Lid Close Action with the following command:
+```bash
+# /etc/systemd/logind.conf
+# HandleLidSwitch=hibernate
+# HandleLidSwitch=suspend-then-hibernate
+sudo sed -e 's|[# ]*HandleLidSwitch=.*$|HandleLidSwitch=suspend-then-hibernate|' -i /etc/systemd/logind.conf
+```
+
+(option) push power button to power off:
+```bash
+sudo sed -e 's|[# ]*HandlePowerKey=.*$|HandlePowerKey=poweroff|' -i /etc/systemd/logind.conf
+```
+
+Restart the systemd-logind service:
+```bash
+sudo systemctl restart systemd-logind.service
+```
+
+### hibernate
+To configure the hibernate time, modify the configuration file located at `/etc/systemd/sleep.conf`. This file allows you to set the interval between the suspend state and hibernation.
+```bash
+sudo sed -e 's|[# ]*HibernateDelaySec=.*$|HibernateDelaySec=180min|' -i /etc/systemd/sleep.conf
 
 # OR
 cat >>/etc/systemd/sleep.conf<<EOF
@@ -50,34 +94,121 @@ HibernateDelaySec=180min
 EOF
 ```
 
-test it:
-```
-sudo systemctl suspend-then-hibernate
-```
-
-Change the Lid Close Action with the following command:
-```
-# /etc/systemd/logind.conf
-HandleLidSwitch=suspend-then-hibernate
-```
-Restart the systemd-logind service:
-```
-sudo systemctl restart systemd-logind.service
-```
-
-
-Set the swap partition in the GRUB config file /etc/default/grub:
+### setup a swap file
+Show the swap info
 ```bash
-blkid /dev/sdaX
+# show configured swap
+swapon --show
+
+free -h
+```
+
+To create swap file,
+```bash
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+ls -lh /swapfile
+```
+
+make swap and using it:
+```bash
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+sudo swapon --show
+free -h
+```
+
+set the file
+```bash
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+### setup a swap partition
+
+If you prepared a harddisk partition for swap, you can prepare it by
+```bash
+PART_SWAP=/dev/sdb3
+
+mkswap ${PART_SWAP}
+
+blkid ${PART_SWAP}
+```
+
+to mount the swap in `/etc/fstab`:
+```bash
+# /dev/sda2       swap       swap       defaults       0 0
+echo "$(blkid -o export ${PART_SWAP} | grep '^UUID=') none	swap	sw	0	0" | sudo tee -a /etc/fstab
+
+swapon --all
+cat /proc/swaps
+```
+
+remove old swap file:
+```bash
+swapoff /swap.img
+# remove config from /etc/fstab
+rm -f /swap.img
+```
+
+
+show the info:
+```bash
+free -mh
+```
+
+### setup the boot
+
+update both grub and initramfs,
+
+for swap file, first obtain the UUID of the root partition and the physical offset of the swapfile within it,
+```bash
+# obtain the UUID of the root partition:
+findmnt / -o UUID -n
+
+# obtain the physical offset of the swapfile
+filefrag -v /swap|awk 'NR==4{gsub(/\./,"");print $4;}'
 
 # /etc/default/grub
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash resume=UUID=5c03967e-b9fe-4a2e-8501–05002aa51dd6"
+GRUB_CMDLINE_LINUX_DEFAULT="resume=UUID=xxxx resume_offset=yyyyy"
+```
 
+
+for the swap partition, in the GRUB config file /etc/default/grub:
+```bash
+#blkid /dev/sdaX
+CONFIG_UUID=$(cat /proc/swaps | grep -v Size | head -n 1 | awk '{print $1}' | xargs -n 1 blkid -o export | grep '^UUID=')
+
+# /etc/default/grub
+# GRUB_CMDLINE_LINUX_DEFAULT="quiet splash resume=${CONFIG_UUID}"
+sed -e "s|GRUB_CMDLINE_LINUX_DEFAULT=\"\([^\"]*\)\"|GRUB_CMDLINE_LINUX_DEFAULT=\"quiet splash resume=${CONFIG_UUID}\"|" -i /etc/default/grub
+```
+
+include the UUID in the /etc/initramfs-tools/conf.d/resume file:
+```bash
+echo "RESUME=${CONFIG_UUID}" | sudo tee -a /etc/initramfs-tools/conf.d/resume
+```
+
+### update boot
+
+```bash
 sudo update-initramfs -u -k all
 sudo update-grub
 ```
 
 
+### testing
+test it:
+```bash
+sudo systemctl suspend-then-hibernate
+
+sudo systemctl hibernate
+```
+and signal the server to boot via WOL packet:
+```bash
+MAC_SVR="11:22:33:44:55:66"
+etherwake "${MAC_SVR}"
+```
 
 ## Install powerautosave.sh on Linux server (Ubuntu)
 
@@ -91,7 +222,7 @@ powerautosave.sh is a script designed to put the server into sleep mode when the
 
 ```bash
 # install packages:
-apt update && apt -y install bash prips ipcalc uuid-runtime
+apt update && apt -y install bash gawk prips ipcalc uuid-runtime
 apt -y install dstat
 apt -y install pcp
 
@@ -108,16 +239,17 @@ touch "${DN_CONF}/pas-ip.list"
 
 # the processes list, the server will enter to sleep if none is running.
 touch "${DN_CONF}/pas-proc.list"
-echo "wget scp rsync dstat" | sudo tee "${DN_CONF}/pas-proc.list"
+echo "wget curl scp rsync dstat" | sudo tee "${DN_CONF}/pas-proc.list"
 
 # setup the waiting time before sleep in config file
-cat >> "${DN_CONF}/powerautosave.conf" <<EOF
+(cat >/dev/stdout <<EOF
 # default waiting time before go to sleep
 PAS_IDLE_WAIT_TIME=900 # second
 PAS_CPU_THRESHOLD=88   # percent
 PAS_HD_THRESHOLD=900   # Kbytes
 PAS_NET_THRESHOLD=4000 # bytes
 EOF
+) | sudo tee "${DN_CONF}/powerautosave.conf"
 
 # setup service
 sudo cp powerautosave.service /etc/systemd/system/powerautosave.service
